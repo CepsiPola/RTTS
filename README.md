@@ -5,6 +5,9 @@
   <a href="../../releases/latest"><b>Download for Windows</b></a>
 </p>
 
+> [!WARNING]
+> **This GitHub page is the only official place to download RTTS.** Copies anywhere else may contain malware. [Read more](#only-download-rtts-from-here)
+
 <!-- DEMO: add an image or GIF as docs/images/demo.png, then delete this line and the closing line below
 <p align="center"><img src="docs/images/demo.png" alt="RTTS in action" width="720"></p>
 -->
@@ -31,6 +34,33 @@
 **Your messages.** AI only turns your text into speech. It doesn't change, rewrite or reply to anything you type. RTTS says exactly what you wrote.
 
 **Where the AI runs.** Every voice runs on your own PC, so your messages never leave it (see [Privacy](#privacy)).
+
+## Only download RTTS from here
+
+The **only** official download is the [Releases](../../releases/latest) page of this GitHub repo: **github.com/CepsiPola/RTTS**. RTTS is never uploaded anywhere else.
+
+Roblox tools are often re-uploaded with malware added, so **don't download RTTS from**:
+
+- Discord servers or DMs
+- YouTube or TikTok descriptions and comments
+- File hosts: MediaFire, MEGA, Google Drive, Dropbox, OneDrive, WeTransfer
+- Download sites: Softonic, Uptodown, FileHippo, SourceForge, CNET Download and similar
+- Reddit, Telegram, forums or itch.io
+- Roblox games, groups, profiles or messages
+- Other GitHub repos or forks that offer their own download
+
+If you got RTTS anywhere else, delete it and download it again from here.
+
+**Signs of a fake:**
+
+- It asks for your Roblox password, login, cookie or 2-step code. **RTTS never does.**
+- It tells you to turn off your antivirus or Windows Defender. **RTTS never does.**
+- It costs money, or wants you to complete a survey or "unlock" it. **RTTS is free.**
+- It comes as a password-protected .zip or .rar, or as anything other than `RTTS-Setup-<version>.exe`.
+
+**Check your download:** each release lists the SHA-256 checksum of its installer. In PowerShell, run `Get-FileHash RTTS-Setup-<version>.exe` in the folder you downloaded it to. If the result doesn't match the release page, don't run it.
+
+**Found a fake?** Please report it on the site where you found it, and [open an issue](../../issues) here so others can be warned.
 
 ## How to set up RTTS
 
