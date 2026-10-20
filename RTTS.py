@@ -44,6 +44,8 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 APP_TITLE = "RTTS"
+APP_VERSION = "1.0.0"      # keep the same as AppVer in RTTS.iss
+USER_AGENT = "RTTS/" + APP_VERSION
 IS_WIN = sys.platform == "win32"
 FROZEN = bool(getattr(sys, "frozen", False))
 APP_DIR = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent
@@ -322,7 +324,7 @@ def log_error(text):
     try:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         with open(ERROR_LOG, "a", encoding="utf-8") as f:
-            f.write("[%s]\n%s\n\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), text))
+            f.write("[%s] RTTS %s\n%s\n\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), APP_VERSION, text))
     except Exception:
         pass
 
@@ -716,7 +718,7 @@ class DownloadCancelled(Exception):
 
 def download_file(url, dest, expected_size, expected_sha, progress):
     part = Path(str(dest) + ".part")
-    req = urllib.request.Request(url, headers={"User-Agent": "RTTS/2.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp, open(part, "wb") as out:
             announced = int(resp.headers.get("Content-Length") or 0)
@@ -1197,7 +1199,7 @@ class OpenAIEngine(Engine):
         req = urllib.request.Request(
             self.URL, data=json.dumps(body).encode("utf-8"), method="POST",
             headers={"Authorization": "Bearer " + key, "Content-Type": "application/json",
-                     "User-Agent": "RTTS/2.0"})
+                     "User-Agent": USER_AGENT})
         try:
             with urllib.request.urlopen(req, timeout=60) as resp:
                 raw = resp.read()
@@ -1689,7 +1691,7 @@ class FlatSlider(tk.Canvas):
 class App:
     def __init__(self, root):
         self.root = root
-        root.title(APP_TITLE)
+        root.title("%s %s" % (APP_TITLE, APP_VERSION))
         root.resizable(False, False)
 
         self.ui_q = queue.Queue()          # callables to run on the Tk thread

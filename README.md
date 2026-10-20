@@ -17,7 +17,7 @@
 
 ## What is RTTS?
 
-RTTS is a python based application that lets you use voice chat without having to speak yourself, it listens to what you are typing in the Roblox window and speaks using local, or cloud voice models.
+RTTS is a Python-based app that lets you use voice chat without having to speak yourself. It listens to what you type in the Roblox window and speaks it using local or cloud voice models.
 
 It plays the voice through a virtual microphone ([VB-Cable](https://vb-audio.com/Cable/)), and Roblox hears that as your mic. It comes with a bunch of voice models to choose from, from tiny robotic voices to very realistic ones.
 
@@ -35,9 +35,9 @@ It plays the voice through a virtual microphone ([VB-Cable](https://vb-audio.com
 
 **Where the AI runs.** Local models run on your own PC, so your messages never leave it. The optional OpenAI voices run in the cloud and send your text to OpenAI (see [Privacy](#privacy)).
 
-## How to setup RTTS
+## How to set up RTTS
 
-First, install VB-Cable from [vb-audio.com/Cable](https://vb-audio.com/Cable/). Restart your computer when prompted to finish.
+First, install VB-Cable from [vb-audio.com/Cable](https://vb-audio.com/Cable/). Restart your computer when it asks you to.
 
 Next, download `RTTS-Setup-<version>.exe` from [Releases](../../releases/latest) and run it. The installer checks for VB-Cable, and lets you pick voices to download right away. Installing a new version over an old one keeps your voices and settings.
 
@@ -63,16 +63,16 @@ Cloud voices send what you type to the provider (OpenAI) and need your own API k
 The installer isn't code-signed. Click **More info**, then **Run anyway**. Only download RTTS from this repo's Releases.
 
 **My antivirus flags it.**
-Some antivirus may flag it because it listens to what you are typing, and this is commonly associated with a type of malware known as keyloggers. 
+Some antivirus programs may flag it because it listens to what you type, which is also what malware called keyloggers does. RTTS only reads what you type while Roblox is the active window, and the full source is in this repo so anyone can check.
 
 **Orpheus is slow, or my game lags while it speaks.**
 Orpheus needs a strong graphics card. If yours struggles, pick Kokoro Best instead. It still sounds very natural and runs on almost any PC.
 
 **Something went wrong.**
-Most errors will be logged and saved at "%APPDATA%\RTTS\error.log"
+Most errors are saved in `%APPDATA%\RTTS\error.log`. If you report a bug, please include that file.
 
 **Does it work on Mac or Linux?**
-No, Windows only for now
+No, it's Windows only for now.
 
 ## Build it yourself
 
