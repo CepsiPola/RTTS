@@ -68,11 +68,33 @@ First, install VB-Cable from [vb-audio.com/Cable](https://vb-audio.com/Cable/). 
 
 Next, download `RTTS-Setup-<version>.exe` from [Releases](../../releases/latest) and run it. The installer checks for VB-Cable, and lets you pick voices to download right away. Installing a new version over an old one keeps your voices and settings.
 
-Open RTTS and set **Output device** to **CABLE Input**. Then, in Roblox, set your microphone to **CABLE Output**.
+Open RTTS and set **Output device** to **CABLE Input**. If you didn't pick a voice in the installer, RTTS downloads one the first time it opens (a few hundred MB), so give it a minute. You can switch voices any time from the menu in the app.
 
-Press **Start (F6)**, open chat in Roblox (the default chat key is `/`), type, and press Enter. Press **Stop (F7)** when you're done. You can change the Start and Stop keys in **Settings > Keybinds**.
+## How to use RTTS
 
-The first time you open RTTS it downloads a voice (a few hundred MB), so give it a minute. You can switch voice models any time from the menu in the app.
+Voice chat has to be turned on for your Roblox account.
+
+**1. Come off mute in Roblox.** Click the microphone at the top left of the screen so it isn't crossed out.
+
+<p align="center"><img src="docs/images/howto-1-unmute.png" alt="The microphone button at the top left in Roblox" width="480"></p>
+
+**2. Press Start in RTTS.** Click **Start (F6)**, or press F6. Press **Stop (F7)** when you're done. You can change both keys in **Settings > Keybinds**.
+
+<p align="center"><img src="docs/images/howto-2-start.png" alt="The Start (F6) button in RTTS" width="420"></p>
+
+**3. Make sure Roblox is listening to VB-Cable.** In Roblox, press Esc, go to **Settings**, and set **Input Device** to **CABLE Output (VB-Audio Virtual Cable)**.
+
+<p align="center"><img src="docs/images/howto-3-input-device.png" alt="Roblox settings with Input Device set to CABLE Output" width="520"></p>
+
+**4. Type in chat.** Press `/`, type your message and press Enter. It shows in chat as normal, and RTTS says it out loud in voice chat.
+
+<p align="center"><img src="docs/images/howto-4-speaking.png" alt="A chat message above the player while RTTS speaks it" width="480"></p>
+
+**Tips**
+
+- **Test without Roblox:** type in the **Test** box in RTTS and click **Speak**.
+- **Hear it yourself:** keep **Also play the voice on my speakers** ticked.
+- **Nobody can hear you?** Check that RTTS's **Output device** is **CABLE Input**, Roblox's **Input Device** is **CABLE Output**, you're not muted in Roblox, and RTTS says "Running".
 
 ## Privacy
 
