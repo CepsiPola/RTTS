@@ -5,9 +5,8 @@ Type in Roblox chat as normal. When you press Enter, the message is also spoken
 with a realistic offline AI voice (Kokoro) into a virtual audio cable
 (VB-Cable), which Roblox voice chat uses as your microphone.
 
-Pick a voice model from the list. Local models run on your own PC (no account, no
-API key, no internet after the one-time download). Cloud models send your text to
-the provider and need an API key.
+Pick a voice model from the list. Every model runs on your own PC (no account, no
+API key, no internet after the one-time download).
 
 
 Made using AI
@@ -69,9 +68,24 @@ def migrate_old_data():
 
 migrate_old_data()
 
+
+def forget_openai_key():
+    """One time: the cloud (OpenAI) voices were removed, so delete a saved API key instead of keeping it on disk."""
+    try:
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict) and "openai_key" in data:
+            del data["openai_key"]
+            with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+    except Exception:
+        pass
+
+
+forget_openai_key()
+
 BASE_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
 PIPER_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
-OPENAI_KEYS_URL = "https://platform.openai.com/api-keys"
 
 # One downloadable file. size / sha are checked when they are known; approx (bytes) only feeds the
 # progress bar for files whose exact size isn't known in advance. unpack names a folder in models\ that a
@@ -139,13 +153,8 @@ ESPEAK_VOICES = [
     ("en-us+whisper", "Whisper (US)"),
 ]
 
-# Voices every OpenAI speech model accepts, plus the extra ones only gpt-4o-mini-tts has.
-OPENAI_VOICES = ["alloy", "ash", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"]
-OPENAI_VOICES_4O = ["alloy", "ash", "ballad", "cedar", "coral", "echo", "fable", "marin", "nova",
-                    "onyx", "sage", "shimmer", "verse"]
-
 # The model list, from the lightest / most robotic to the heaviest / most natural.
-#   kind  : which engine runs it        where : "local" (on this PC) or "cloud"
+#   kind  : which engine runs it        where : "local" (every model runs on this PC)
 CATALOG = [
     dict(id="espeak", name="eSpeak", kind="espeak", where="local", params="no neural net",
          note="Robotic. Instant, tiny, almost no CPU."),
@@ -177,13 +186,6 @@ CATALOG = [
     dict(id="orpheus", name="Orpheus", kind="orpheus", where="local", params="3B params", params_b=3.0,
          voices=ORPHEUS_VOICES,
          note="%s Large model. Most realistic local voice. Speed slider has no effect." % LARGE_MARK),
-    dict(id="openai-tts1", name="OpenAI TTS", kind="openai", where="cloud", provider="OpenAI",
-         model="tts-1", voices=OPENAI_VOICES, note="Natural and fast. Uses your OpenAI key."),
-    dict(id="openai-tts1hd", name="OpenAI TTS HD", kind="openai", where="cloud", provider="OpenAI",
-         model="tts-1-hd", voices=OPENAI_VOICES, note="Higher quality than TTS, a bit slower."),
-    dict(id="openai-4o", name="GPT-4o mini TTS", kind="openai", where="cloud", provider="OpenAI",
-         model="gpt-4o-mini-tts", voices=OPENAI_VOICES_4O,
-         note="Newest and most expressive. Speed slider has no effect."),
 ]
 CATALOG_BY_ID = {e["id"]: e for e in CATALOG}
 DEFAULT_MODEL = "kokoro-best"
@@ -211,10 +213,8 @@ def is_large(e):
 
 
 def model_label(e):
-    """Text shown in the model drop-down: name, local/cloud, size (and the large-model mark)."""
-    if e["where"] == "cloud":
-        tail = "Cloud"
-    elif entry_mb(e):
+    """Text shown in the model drop-down: name, size (and the large-model mark)."""
+    if entry_mb(e):
         tail = "Local \u00b7 %s" % size_text(entry_mb(e))
     else:
         tail = "Local \u00b7 built in"
@@ -235,7 +235,7 @@ def catalog_voices(e):
 
 
 def entry_files(e, voice):
-    """The files that must be on disk to use this model (and voice). Empty for built-in / cloud."""
+    """The files that must be on disk to use this model (and voice). Empty for built-in (eSpeak)."""
     if e["kind"] == "kokoro":
         return list(e["files"])
     if e["kind"] == "piper":
@@ -285,7 +285,6 @@ DEFAULTS = {
     "topmost": False,
     "start_key": "f6",         # Start / Stop hotkeys (pynput key names), set in Settings > Keybinds
     "stop_key": "f7",
-    "openai_key": "",          # only used by the cloud (OpenAI) models
 }
 
 FONT = ("Segoe UI", 9)
@@ -1177,48 +1176,6 @@ class PiperEngine(Engine):
         return np.concatenate(parts), self.rate
 
 
-class OpenAIEngine(Engine):
-    """Cloud voices from OpenAI's speech API. Needs an API key; sends the text you type to OpenAI."""
-    URL = "https://api.openai.com/v1/audio/speech"
-
-    def __init__(self, entry, key):
-        self.entry = entry
-        self.key = key                            # updated live when the key is edited in Settings
-
-    def voice_list(self):
-        return [(v, v.capitalize()) for v in self.entry["voices"]]
-
-    def synth(self, text, voice, speed):
-        key = (self.key or "").strip()
-        if not key:
-            raise RuntimeError("Add your OpenAI API key in Settings (Cloud voices) first.")
-        model = self.entry["model"]
-        body = {"model": model, "input": text, "voice": voice, "response_format": "pcm"}
-        if model in ("tts-1", "tts-1-hd") and abs(speed - 1.0) > 0.01:
-            body["speed"] = round(speed, 2)       # gpt-4o-mini-tts has no speed control
-        req = urllib.request.Request(
-            self.URL, data=json.dumps(body).encode("utf-8"), method="POST",
-            headers={"Authorization": "Bearer " + key, "Content-Type": "application/json",
-                     "User-Agent": USER_AGENT})
-        try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                raw = resp.read()
-        except urllib.error.HTTPError as e:
-            try:
-                detail = json.loads(e.read().decode("utf-8", "replace")).get("error", {}).get("message", "")
-            except Exception:
-                detail = ""
-            if e.code == 401:
-                raise RuntimeError("OpenAI rejected the API key (401). Check it in Settings.")
-            raise RuntimeError("OpenAI error %d: %s" % (e.code, (detail or str(e.reason))[:160]))
-        except urllib.error.URLError as e:
-            raise RuntimeError("Couldn't reach OpenAI: %s" % e.reason)
-        pcm = np.frombuffer(raw[:len(raw) // 2 * 2], dtype="<i2").astype(np.float32) / 32768.0
-        if pcm.size == 0:
-            raise ValueError("OpenAI sent no audio")
-        return pcm, 24000                         # "pcm" format is 24 kHz, 16-bit, mono
-
-
 def free_port():
     import socket
     with socket.socket() as s:
@@ -1506,14 +1463,12 @@ class OrpheusEngine(Engine):
         self._stop()
 
 
-def build_engine(entry, voice, key, status, prog, cancelled, speed=None):
+def build_engine(entry, voice, status, prog, cancelled, speed=None):
     """Download whatever is missing, then load the engine. Runs on a background thread."""
     kind = entry["kind"]
     if kind == "espeak":
         status("Loading eSpeak ...")
         return ESpeakEngine()
-    if kind == "openai":
-        return OpenAIEngine(entry, key)
     if kind == "kokoro":
         paths = ensure_files(entry["files"], entry["name"], status, prog, cancelled, speed)
         status("Loading voice engine (first start can take a few seconds)...")
@@ -1792,7 +1747,6 @@ class App:
         self.v_status = tk.StringVar(value="Starting...")
         self.v_info = tk.StringVar()
         self.v_pct = tk.StringVar()
-        self.v_openai = tk.StringVar()
         self.v_speed_txt = tk.StringVar(value="100%")
         self.v_vol_txt = tk.StringVar(value="100")
 
@@ -2063,20 +2017,6 @@ class App:
                        "and if yours doesn't, none of your messages will be spoken. "
                        "If that happens, turn this off.").grid(row=2, column=0, sticky="w", pady=(4, 0))
 
-        g4 = ttk.LabelFrame(general, text="Cloud voices", padding=(10, 6))
-        g4.grid(row=3, column=0, sticky="ew", pady=(0, 6))
-        g4.columnconfigure(1, weight=1)
-        ttk.Label(g4, text="OpenAI API key:").grid(row=0, column=0, sticky="w")
-        ent = ttk.Entry(g4, textvariable=self.v_openai, show="\u2022", width=34)
-        ent.grid(row=0, column=1, sticky="ew", padx=(6, 6))
-        ent.bind("<FocusOut>", lambda e: self.on_openai_key_change())
-        ent.bind("<Return>", lambda e: self.on_openai_key_change())
-        ttk.Button(g4, text="Get a key", command=lambda: webbrowser.open(OPENAI_KEYS_URL)).grid(row=0, column=2)
-        ttk.Label(g4, wraplength=380, justify="left",
-                  text="Only used by the Cloud models in the model list. They send the text you type to OpenAI "
-                       "to make the voice, and OpenAI may charge your account. The key is saved in settings.json "
-                       "on this PC.").grid(row=1, column=0, columnspan=3, sticky="w", pady=(4, 0))
-
         ttk.Label(outer, text="Changes here are saved automatically.").grid(row=1, column=0, sticky="w", pady=(0, 6))
         ttk.Button(outer, text="Close", command=self.close_settings).grid(row=2, column=0, sticky="e")
 
@@ -2169,7 +2109,6 @@ class App:
     def close_settings(self):
         self.end_bind()
         if self.settings_win is not None:
-            self.on_openai_key_change()
             try:
                 self.settings_win.destroy()
             except Exception:
@@ -2297,7 +2236,6 @@ class App:
         data["theme"] = self.v_theme.get()
         data["topmost"] = bool(self.v_top.get())
         data["slash_typed"] = bool(self.v_slash.get())
-        data["openai_key"] = self.v_openai.get().strip()
         data["start_key"] = self.hotkeys["start"].name
         data["stop_key"] = self.hotkeys["stop"].name
         try:
@@ -2397,25 +2335,16 @@ class App:
                 return e
         return CATALOG_BY_ID[DEFAULT_MODEL]
 
-    def openai_key(self):
-        return (self.v_openai.get() or os.environ.get("OPENAI_API_KEY") or "").strip()
-
     def update_info(self):
-        """The two grey lines under the model menu: what it is, local/cloud, size, parameters, state."""
+        """The two grey lines under the model menu: what it is, size, parameters, state."""
         e = self.current_entry()
-        facts = ["Cloud" if e["where"] == "cloud" else "Local"]
-        if e["where"] == "local":
-            mb = entry_mb(e)
-            facts.append((size_text(mb) + (" per voice" if e["kind"] == "piper" else "")) if mb else "built in")
+        mb = entry_mb(e)
+        facts = ["Local", (size_text(mb) + (" per voice" if e["kind"] == "piper" else "")) if mb else "built in"]
         if e.get("params"):
             facts.append(e["params"])
-        if e["kind"] == "openai":
-            facts.append("API key set" if self.openai_key() else "API key needed")
-            facts.append("text sent to %s" % e.get("provider", "the provider"))
-        else:
-            files = entry_files(e, self.voice_id())
-            if files:
-                facts.append("downloaded" if files_ready(files) else "not downloaded yet")
+        files = entry_files(e, self.voice_id())
+        if files:
+            facts.append("downloaded" if files_ready(files) else "not downloaded yet")
         self.v_info.set("%s\n%s" % (e["note"], " \u00b7 ".join(facts)))
 
     @staticmethod
@@ -2455,12 +2384,6 @@ class App:
         self.update_info()
         if piper:
             self.request_engine()
-
-    def on_openai_key_change(self):
-        self.save_ui_prefs()
-        if isinstance(self.engine, OpenAIEngine):
-            self.engine.key = self.openai_key()
-        self.update_info()
 
     def fill_devices(self, preferred):
         try:
@@ -2554,7 +2477,6 @@ class App:
         self.chosen_entry = entry
         self.v_model.set(model_label(entry))
         self.fill_voice_list(catalog_voices(entry), prefer=str(d.get("voice") or ""))
-        self.v_openai.set(str(d.get("openai_key") or ""))
         self.v_speed.set(min(160, max(60, self._int(d.get("speed"), 100))))
         self.v_volume.set(min(100, max(0, self._int(d.get("volume"), 100))))
         self.hotkeys = self.load_hotkeys(d)
@@ -2608,7 +2530,6 @@ class App:
             "slash_typed": bool(self.v_slash.get()),
             "theme": self.v_theme.get(),
             "topmost": bool(self.v_top.get()),
-            "openai_key": self.v_openai.get().strip(),
             "start_key": self.hotkeys["start"].name,
             "stop_key": self.hotkeys["stop"].name,
         }
@@ -2626,7 +2547,6 @@ class App:
         d["model"] = keep_model          # don't trigger a re-download/reload on reset
         d["theme"] = self.v_theme.get()  # looks are chosen in Settings, not reset here
         d["topmost"] = bool(self.v_top.get())
-        d["openai_key"] = self.v_openai.get()      # don't wipe the saved key
         d["start_key"] = self.hotkeys["start"].name   # keybinds are chosen in Settings too
         d["stop_key"] = self.hotkeys["stop"].name
         self.apply_settings(d)
@@ -2656,10 +2576,9 @@ class App:
         self.set_speed("")
         self.show_progress_row(False)
         self.set_status("Loading %s ..." % entry["name"])
-        threading.Thread(target=self._load_engine, args=(entry, voice, self.openai_key(), gen),
-                         daemon=True).start()
+        threading.Thread(target=self._load_engine, args=(entry, voice, gen), daemon=True).start()
 
-    def _load_engine(self, entry, voice, key, gen):
+    def _load_engine(self, entry, voice, gen):
         with self.load_lock:
             if gen != self.load_gen:
                 return                     # a newer choice replaced this one while it waited
@@ -2673,7 +2592,7 @@ class App:
                 prog = lambda p: self.post(self.download_progress, p, gen)
                 spd = lambda t: self.post(self.set_speed, t, gen)
                 cancelled = lambda: gen != self.load_gen or self.closing
-                eng = build_engine(entry, voice, key, status, prog, cancelled, spd)
+                eng = build_engine(entry, voice, status, prog, cancelled, spd)
                 if cancelled():
                     eng.close()
                     return

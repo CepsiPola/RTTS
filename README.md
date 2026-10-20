@@ -17,7 +17,7 @@
 
 ## What is RTTS?
 
-RTTS is a Python-based app that lets you use voice chat without having to speak yourself. It listens to what you type in the Roblox window and speaks it using local or cloud voice models.
+RTTS is a Python-based app that lets you use voice chat without having to speak yourself. It listens to what you type in the Roblox window and speaks it using voice models that run on your own PC.
 
 It plays the voice through a virtual microphone ([VB-Cable](https://vb-audio.com/Cable/)), and Roblox hears that as your mic. It comes with a bunch of voice models to choose from, from tiny robotic voices to very realistic ones.
 
@@ -33,7 +33,7 @@ It plays the voice through a virtual microphone ([VB-Cable](https://vb-audio.com
 
 **Your messages.** AI only turns your text into speech. It doesn't change, rewrite or reply to anything you type. RTTS says exactly what you wrote.
 
-**Where the AI runs.** Local models run on your own PC, so your messages never leave it. The optional OpenAI voices run in the cloud and send your text to OpenAI (see [Privacy](#privacy)).
+**Where the AI runs.** Every voice runs on your own PC, so your messages never leave it (see [Privacy](#privacy)).
 
 ## How to set up RTTS
 
@@ -51,11 +51,9 @@ The first time you open RTTS it downloads a voice (a few hundred MB), so give it
 
 RTTS reads your keyboard only to see what you type in chat, and by default only while Roblox is the active window. The code is public, so you can check.
 
-Voices that run on your PC never send your messages anywhere. The only internet use is downloading the voice.
+Every voice runs on your PC, so your messages are never sent anywhere. RTTS needs no account or API key, and the only internet use is downloading the voices.
 
 Orpheus runs in a helper program (llama.cpp's `llama-server`) that RTTS starts on your PC. It only accepts connections from your own computer, and RTTS closes it when you switch models or close RTTS.
-
-Cloud voices send what you type to the provider (OpenAI) and need your own API key. Your key is saved as plain text in `%APPDATA%\RTTS\settings.json`, so keep that file private.
 
 ## FAQ
 
@@ -82,7 +80,7 @@ Run `installer.bat` to install the Python libraries RTTS needs (it doesn't insta
 
 ## Credits
 
-RTTS is built on great open-source work: [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) and [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx), [Piper](https://github.com/rhasspy/piper) and [piper-voices](https://huggingface.co/rhasspy/piper-voices), [espeak-ng](https://github.com/espeak-ng/espeak-ng), [Orpheus TTS](https://github.com/canopyai/Orpheus-TTS) by Canopy Labs (using [Unsloth's GGUF version](https://huggingface.co/unsloth/orpheus-3b-0.1-ft-GGUF)), [llama.cpp](https://github.com/ggml-org/llama.cpp), [SNAC](https://github.com/hubertsiuzdak/snac) (using the [ONNX version](https://huggingface.co/onnx-community/snac_24khz-ONNX)), [VB-Cable](https://vb-audio.com/Cable/), and the [OpenAI](https://platform.openai.com/api-keys) speech API for the optional cloud voices. Each project has its own license, so check them before redistributing anything.
+RTTS is built on great open-source work: [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) and [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx), [Piper](https://github.com/rhasspy/piper) and [piper-voices](https://huggingface.co/rhasspy/piper-voices), [espeak-ng](https://github.com/espeak-ng/espeak-ng), [Orpheus TTS](https://github.com/canopyai/Orpheus-TTS) by Canopy Labs (using [Unsloth's GGUF version](https://huggingface.co/unsloth/orpheus-3b-0.1-ft-GGUF)), [llama.cpp](https://github.com/ggml-org/llama.cpp), [SNAC](https://github.com/hubertsiuzdak/snac) (using the [ONNX version](https://huggingface.co/onnx-community/snac_24khz-ONNX)), and [VB-Cable](https://vb-audio.com/Cable/). Each project has its own license, so check them before redistributing anything.
 
 ## Disclaimer
 
