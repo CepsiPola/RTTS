@@ -214,10 +214,7 @@ def is_large(e):
 
 def model_label(e):
     """Text shown in the model drop-down: name, size (and the large-model mark)."""
-    if entry_mb(e):
-        tail = "Local \u00b7 %s" % size_text(entry_mb(e))
-    else:
-        tail = "Local \u00b7 built in"
+    tail = size_text(entry_mb(e)) if entry_mb(e) else "built in"
     return "%s%s \u00b7 %s" % (LARGE_MARK + " " if is_large(e) else "", e["name"], tail)
 
 
@@ -2339,7 +2336,7 @@ class App:
         """The two grey lines under the model menu: what it is, size, parameters, state."""
         e = self.current_entry()
         mb = entry_mb(e)
-        facts = ["Local", (size_text(mb) + (" per voice" if e["kind"] == "piper" else "")) if mb else "built in"]
+        facts = [(size_text(mb) + (" per voice" if e["kind"] == "piper" else "")) if mb else "built in"]
         if e.get("params"):
             facts.append(e["params"])
         files = entry_files(e, self.voice_id())
