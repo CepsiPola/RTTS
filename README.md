@@ -1,7 +1,3 @@
-<!-- LOGO: add your logo as docs/images/logo.png, then delete this line and the closing line below
-<p align="center"><img src="docs/images/logo.png" alt="RTTS logo" width="160"></p>
--->
-
 <h1 align="center"><img src="docs/images/title.png" alt="RTTS" height="64"></h1>
 <p align="center"><b>Roblox Text-to-Speech</b><br>Type in Roblox chat. Be heard in voice chat.</p>
 
@@ -17,13 +13,14 @@
 
 ## What is RTTS?
 
-RTTS is a Python-based app that lets you use voice chat without having to speak yourself. It listens to what you type in the Roblox window and speaks it using voice models that run on your own PC.
+**Type in Roblox chat, and RTTS says it out loud in voice chat.** No mic, no talking.
 
-It plays the voice through a virtual microphone ([VB-Cable](https://vb-audio.com/Cable/)), and Roblox hears that as your mic. It comes with a bunch of voice models to choose from, from tiny robotic voices to very realistic ones.
+- **100% local:** every voice runs on your PC. No account, no API key.
+- **Robotic to realistic:** 7 voice models, from tiny eSpeak to ⚡ Orpheus.
+- **Roblox hears it as your mic:** the voice plays through [VB-Cable](https://vb-audio.com/Cable/).
+- **Stays up to date:** checks for a new version every time it starts.
 
-<!-- SCREENSHOT: add the app window as docs/images/screenshot.png, then delete this line and the closing line below
-<p align="center"><img src="docs/images/screenshot.png" alt="The RTTS window" width="520"></p>
--->
+<p align="center"><img src="docs/images/screenshot.png" alt="The RTTS window" width="460"></p>
 
 ## AI use
 
@@ -51,7 +48,7 @@ The first time you open RTTS it downloads a voice (a few hundred MB), so give it
 
 RTTS reads your keyboard only to see what you type in chat, and by default only while Roblox is the active window. The code is public, so you can check.
 
-Every voice runs on your PC, so your messages are never sent anywhere. RTTS needs no account or API key, and the only internet use is downloading the voices.
+Every voice runs on your PC, so your messages are never sent anywhere. RTTS needs no account or API key. It only uses the internet to download voices, and to ask GitHub if there's a newer version of RTTS when it starts. Nothing you type is sent.
 
 Orpheus runs in a helper program (llama.cpp's `llama-server`) that RTTS starts on your PC. It only accepts connections from your own computer, and RTTS closes it when you switch models or close RTTS.
 
@@ -68,6 +65,9 @@ Orpheus needs a strong graphics card. If yours struggles, pick Kokoro Best inste
 
 **Something went wrong.**
 Most errors are saved in `%APPDATA%\RTTS\error.log`. If you report a bug, please include that file.
+
+**How do I update?**
+RTTS checks for a new version every time it starts and asks if you want to update. To update without being asked, turn on **Install updates automatically** in **Settings > General > About and updates**.
 
 **Does it work on Mac or Linux?**
 No, it's Windows only for now.

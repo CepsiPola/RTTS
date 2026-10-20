@@ -45,6 +45,10 @@ from tkinter import messagebox, ttk
 APP_TITLE = "RTTS"
 APP_VERSION = "1.0.0"      # keep the same as AppVer in RTTS.iss
 USER_AGENT = "RTTS/" + APP_VERSION
+GITHUB_REPO = "CepsiPola/RTTS"
+REPO_URL = "https://github.com/" + GITHUB_REPO
+RELEASES_URL = REPO_URL + "/releases/latest"
+LATEST_RELEASE_API = "https://api.github.com/repos/%s/releases/latest" % GITHUB_REPO
 IS_WIN = sys.platform == "win32"
 FROZEN = bool(getattr(sys, "frozen", False))
 APP_DIR = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent
@@ -52,6 +56,7 @@ MODEL_DIR = APP_DIR / "models"
 DATA_DIR = Path(os.environ.get("APPDATA") or Path.home()) / "RTTS"
 SETTINGS_FILE = DATA_DIR / "settings.json"
 ERROR_LOG = DATA_DIR / "error.log"
+UPDATE_DIR = DATA_DIR / "updates"     # downloaded installers; cleared on the next start
 
 # Before the rename to RTTS this app kept its settings in a folder named after the old name.
 OLD_DATA_DIR = DATA_DIR.parent / "RobloxChatVoice"
@@ -279,6 +284,7 @@ DEFAULTS = {
     "interrupt": False,        # a new chat message stops the one that is playing
     "slash_typed": False,
     "skip_emojis": False,
+    "auto_update": False,      # install new versions without asking (Settings > About and updates)
     "theme": "light",          # light / dark / system
     "topmost": False,
     "start_key": "f6",         # Start / Stop hotkeys (pynput key names), set in Settings > Keybinds
@@ -886,6 +892,36 @@ def resample_linear(audio, sr_from, sr_to):
     x_old = np.linspace(0.0, 1.0, num=len(audio), endpoint=False)
     x_new = np.linspace(0.0, 1.0, num=n_out, endpoint=False)
     return np.interp(x_new, x_old, audio).astype(np.float32)
+
+
+# --------------------------------------------------------------------------
+#  Updates (checked against this repo's latest GitHub release every time RTTS starts)
+# --------------------------------------------------------------------------
+def version_tuple(v):
+    """'v1.2.3' / '1.2.3' -> (1, 2, 3), so versions compare as numbers."""
+    return tuple(int(n) for n in re.findall(r"\d+", v or "")[:3])
+
+
+def fetch_latest_release():
+    """The newest published release: {version, url, asset (name, url, size, sha) or None}. None if there is none."""
+    req = urllib.request.Request(LATEST_RELEASE_API, headers={"User-Agent": USER_AGENT,
+                                                              "Accept": "application/vnd.github+json"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        if e.code == 404:                       # no release published yet
+            return None
+        raise
+    asset = None
+    for a in data.get("assets") or ():
+        if re.fullmatch(r"RTTS-Setup-[\w.\-]+\.exe", a.get("name") or ""):
+            digest = a.get("digest") or ""
+            sha = digest[7:] if digest.startswith("sha256:") else None
+            asset = (a["name"], a["browser_download_url"], int(a.get("size") or 0), sha)
+            break
+    return {"version": (data.get("tag_name") or "").lstrip("vV"), "url": data.get("html_url") or RELEASES_URL,
+            "asset": asset}
 
 
 def strip_emojis(text):
@@ -1732,6 +1768,9 @@ class App:
             root.after(300, self.confirm_startup_model)
         else:
             self.start_engine_load(self.current_entry(), self.voice_id())
+        self.update_busy = False          # an update is downloading / starting
+        self.update_checking = False      # a check is in progress
+        root.after(1500, self.start_update_check)
 
     # ---------------- UI ----------------
     def build_ui(self):
@@ -1752,6 +1791,7 @@ class App:
         self.v_interrupt = tk.BooleanVar(value=False)
         self.v_slash = tk.BooleanVar(value=False)
         self.v_emoji = tk.BooleanVar(value=False)
+        self.v_auto = tk.BooleanVar(value=False)
         self.v_theme = tk.StringVar(value="light")
         self.v_top = tk.BooleanVar(value=False)
         self.v_test = tk.StringVar(value="Hello, this is a test.")
@@ -2032,6 +2072,18 @@ class App:
         ttk.Label(g3, text="Emojis are left out instead of being read out. A message that is only emojis "
                            "isn't spoken.", wraplength=380, justify="left").grid(row=4, column=0, sticky="w", pady=(2, 0))
 
+        g4 = ttk.LabelFrame(general, text="About and updates", padding=(10, 6))
+        g4.grid(row=3, column=0, sticky="ew", pady=(0, 6))
+        ttk.Label(g4, text="RTTS %s" % APP_VERSION, style="Bold.TLabel").grid(row=0, column=0, sticky="w")
+        bf = ttk.Frame(g4)
+        bf.grid(row=1, column=0, sticky="w", pady=(4, 0))
+        ttk.Button(bf, text="Check for updates", command=lambda: self.start_update_check(manual=True)).pack(side="left")
+        ttk.Button(bf, text="GitHub page", command=lambda: webbrowser.open(REPO_URL)).pack(side="left", padx=(6, 0))
+        ttk.Checkbutton(g4, text="Install updates automatically", variable=self.v_auto,
+                        command=self.save_ui_prefs).grid(row=2, column=0, sticky="w", pady=(8, 0))
+        ttk.Label(g4, text="RTTS checks GitHub for a new version every time it starts. With this on, it updates "
+                           "without asking first.", wraplength=380, justify="left").grid(row=3, column=0, sticky="w", pady=(2, 0))
+
         ttk.Label(outer, text="Changes here are saved automatically.").grid(row=1, column=0, sticky="w", pady=(0, 6))
         ttk.Button(outer, text="Close", command=self.close_settings).grid(row=2, column=0, sticky="e")
 
@@ -2252,6 +2304,7 @@ class App:
         data["topmost"] = bool(self.v_top.get())
         data["slash_typed"] = bool(self.v_slash.get())
         data["skip_emojis"] = bool(self.v_emoji.get())
+        data["auto_update"] = bool(self.v_auto.get())
         data["start_key"] = self.hotkeys["start"].name
         data["stop_key"] = self.hotkeys["stop"].name
         try:
@@ -2505,6 +2558,7 @@ class App:
         self.v_interrupt.set(bool(d.get("interrupt", False)))
         self.v_slash.set(bool(d.get("slash_typed", False)))
         self.v_emoji.set(bool(d.get("skip_emojis", False)))
+        self.v_auto.set(bool(d.get("auto_update", False)))
         theme = d.get("theme")
         self.v_theme.set(theme if theme in ("light", "dark", "system") else "light")
         self.v_top.set(bool(d.get("topmost", False)))
@@ -2546,6 +2600,7 @@ class App:
             "interrupt": bool(self.v_interrupt.get()),
             "slash_typed": bool(self.v_slash.get()),
             "skip_emojis": bool(self.v_emoji.get()),
+            "auto_update": bool(self.v_auto.get()),
             "theme": self.v_theme.get(),
             "topmost": bool(self.v_top.get()),
             "start_key": self.hotkeys["start"].name,
@@ -2565,6 +2620,7 @@ class App:
         d["model"] = keep_model          # don't trigger a re-download/reload on reset
         d["theme"] = self.v_theme.get()  # looks are chosen in Settings, not reset here
         d["topmost"] = bool(self.v_top.get())
+        d["auto_update"] = bool(self.v_auto.get())
         d["start_key"] = self.hotkeys["start"].name   # keybinds are chosen in Settings too
         d["stop_key"] = self.hotkeys["stop"].name
         self.apply_settings(d)
@@ -3135,6 +3191,130 @@ class App:
         self.txt_log.delete("1.0", "end")
         self.txt_log.insert("1.0", "\n".join(self.recent))
         self.txt_log.configure(state="disabled")
+
+    # ---------------- updates ----------------
+    def start_update_check(self, manual=False):
+        """Ask GitHub for the latest release on a background thread. manual=True also reports "up to date" and errors."""
+        if self.closing or self.update_busy or self.update_checking:
+            return
+        self.update_checking = True
+        if not manual:
+            shutil.rmtree(UPDATE_DIR, ignore_errors=True)     # the installer from the last update is done by now
+
+        def work():
+            try:
+                rel, err = fetch_latest_release(), None
+            except Exception as e:
+                rel, err = None, e
+            self.post(self.on_update_result, rel, err, manual)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def on_update_result(self, rel, err, manual):
+        self.update_checking = False
+        if self.closing or self.update_busy:
+            return
+        parent = self.settings_win if manual and self.settings_win is not None else self.root
+        if err is not None:
+            if manual:
+                messagebox.showwarning(APP_TITLE, "Couldn't check for updates.\n\n%s" % err, parent=parent)
+            return
+        if rel is None or version_tuple(rel["version"]) <= version_tuple(APP_VERSION):
+            if manual:
+                messagebox.showinfo(APP_TITLE, "You have the latest version (RTTS %s)." % APP_VERSION, parent=parent)
+            return
+        if self.v_auto.get() and not manual and FROZEN and rel["asset"]:
+            self.install_update(rel)
+            return
+        if messagebox.askyesno(
+                "%s update" % APP_TITLE,
+                "RTTS %s is out. You have %s.\n\nDo you want to update now?\n\n"
+                "Yes (recommended): updates keep RTTS stable and fix bugs. RTTS closes, updates, "
+                "and opens again, and your voices and settings are kept.\n\n"
+                "No: keep using this version. RTTS asks again next time it starts."
+                % (rel["version"], APP_VERSION), icon="question", parent=parent):
+            self.install_update(rel)
+
+    def install_update(self, rel):
+        """Download the new installer with a progress window, then run it and close RTTS (it reopens after)."""
+        if not (FROZEN and rel["asset"]):
+            webbrowser.open(rel["url"])       # running from source, or the release has no installer: show the page
+            return
+        self.update_busy = True
+        name, url, size, sha = rel["asset"]
+        win = tk.Toplevel(self.root)
+        win.title("Updating %s" % APP_TITLE)
+        win.resizable(False, False)
+        win.transient(self.root)
+        win.configure(bg=self.root.cget("bg"))
+        self.apply_icon(win)
+        f = ttk.Frame(win, padding=(14, 12))
+        f.grid(row=0, column=0)
+        v_text = tk.StringVar(value="Downloading RTTS %s ..." % rel["version"])
+        ttk.Label(f, textvariable=v_text, width=46).grid(row=0, column=0, sticky="w")
+        pb = ttk.Progressbar(f, length=320, maximum=100)
+        pb.grid(row=1, column=0, sticky="ew", pady=(8, 8))
+        cancelled = [False]
+
+        def cancel():
+            cancelled[0] = True
+
+        ttk.Button(f, text="Cancel", command=cancel).grid(row=2, column=0, sticky="e")
+        win.protocol("WM_DELETE_WINDOW", cancel)
+        self.root.update_idletasks()
+        win.geometry("+%d+%d" % (self.root.winfo_x() + 40, self.root.winfo_y() + 60))
+        shown = [-1]
+
+        def show(pct):
+            pb["value"] = pct
+            v_text.set("Downloading RTTS %s: %d%%" % (rel["version"], pct))
+
+        def progress(done, total):
+            if cancelled[0] or self.closing:
+                raise DownloadCancelled()
+            pct = int(done * 100 // total) if total else 0
+            if pct != shown[0]:
+                shown[0] = pct
+                self.post(show, pct)
+
+        def finish(path, err):
+            self.update_busy = False
+            try:
+                win.destroy()
+            except Exception:
+                pass
+            if path is None:
+                if err is not None and messagebox.askyesno(
+                        APP_TITLE, "Couldn't download the update.\n\n%s\n\nOpen the download page on GitHub instead?"
+                        % err, icon="warning"):
+                    webbrowser.open(rel["url"])
+                return
+            try:
+                # /RELAUNCH=1 makes the installer open RTTS again when it's done (see RTTS.iss)
+                subprocess.Popen([str(path), "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/RELAUNCH=1"],
+                                 creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                                 close_fds=True)
+            except Exception as e:
+                log_error(traceback.format_exc())
+                messagebox.showerror(APP_TITLE, "Couldn't start the update.\n\n%s" % e)
+                return
+            self.on_close()
+
+        def work():
+            path = UPDATE_DIR / name
+            try:
+                UPDATE_DIR.mkdir(parents=True, exist_ok=True)
+                download_file(url, path, size, sha, progress)
+            except DownloadCancelled:
+                self.post(finish, None, None)
+                return
+            except Exception as e:
+                log_error(traceback.format_exc())
+                self.post(finish, None, e)
+                return
+            self.post(finish, path, None)
+
+        threading.Thread(target=work, daemon=True).start()
 
     # ---------------- shutdown ----------------
     def on_close(self):

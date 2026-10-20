@@ -116,6 +116,8 @@ Name: "{autodesktop}\RTTS"; Filename: "{app}\RTTS.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\RTTS.exe"; Description: "Launch RTTS"; Flags: nowait postinstall skipifsilent
+; RTTS's own updater runs this installer with /SILENT /RELAUNCH=1, so RTTS opens again when the update is done
+Filename: "{app}\RTTS.exe"; Flags: nowait; Check: RelaunchAfterUpdate
 Filename: "https://vb-audio.com/Cable/"; Description: "Open the VB-Cable download page (needed so Roblox can hear RTTS)"; Flags: shellexec postinstall skipifsilent; Check: not VBCableInstalled
 
 [Code]
@@ -130,6 +132,11 @@ var
   VBCablePage: TWizardPage;
   VBCableStatus: TNewStaticText;
   DeleteUserData: Boolean;
+
+function RelaunchAfterUpdate: Boolean;
+begin
+  Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
+end;
 
 function VBCableInstalled: Boolean;
 begin

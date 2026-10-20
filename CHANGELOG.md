@@ -14,6 +14,8 @@ The first public release.
 - Options to only work while Roblox is the active window, also play the voice on your speakers, and let a new message stop the one that is playing.
 - Experimental option to skip emojis instead of reading them out.
 - Light, dark or match-Windows theme.
+- Checks GitHub for a new version every time it starts and asks if you want to update, or updates by itself if you turn on automatic updates.
+- Settings > About and updates shows your version, with buttons to check for updates and open the GitHub page.
 
 **Installer**
 - Checks for VB-Cable and helps you install it.
