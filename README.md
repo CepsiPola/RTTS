@@ -1,5 +1,4 @@
-<h1 align="center"><img src="docs/images/title.png" alt="RTTS" height="64"></h1>
-<p align="center"><b>Roblox Text-to-Speech</b><br>Type in Roblox chat. Be heard in voice chat.</p>
+<p align="center"><img src="docs/images/banner.png" alt="RTTS: Roblox Text-to-Speech. Type in chat. Be heard in voice chat." width="100%"></p>
 
 <p align="center">
   <a href="../../releases/latest"><b>Download for Windows</b></a> · <a href="docs/images/demo.gif">Watch the video guide</a>
