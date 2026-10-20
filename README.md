@@ -108,7 +108,7 @@ Orpheus runs in a helper program (llama.cpp's `llama-server`) that RTTS starts o
 
 RTTS can send which voice you use (for example "Kokoro: af_heart"), so I can see which voices are popular and which are worth improving. It's **off unless you tick it**: the installer has an unticked "Send anonymous stats about which voice I use" box, and you can turn it on or off anytime in Settings > General > About and updates. Updates never change your choice.
 
-That is the only thing it sends. It never sends what you type, what you hear, your Roblox username, your keybinds, your files, or anything that identifies you or your PC.
+That is the only thing it sends. It never sends what you type, what you hear, your Roblox username, your keybinds, your files, or anything that identifies you or your PC. Your IP address isn't stored or used to look up your location, and each launch gets a new random ID, so launches can't be linked together.
 
 ## FAQ
 
