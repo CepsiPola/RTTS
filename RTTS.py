@@ -329,7 +329,7 @@ DEFAULTS = {
     "stop_key": "f7",
 }
 
-# The look: retro desktop windows (raised grey buttons, sunken white fields, a coloured title strip) in
+# The look: retro desktop windows (raised grey buttons, sunken white fields, etched group boxes) in
 # Space Mono, which ships with RTTS in assets/fonts (SIL Open Font License, see assets/fonts/OFL.txt).
 FONT_FILES = ("SpaceMono-Regular.ttf", "SpaceMono-Bold.ttf")
 UI_FAMILY = "Space Mono"           # main() falls back to Consolas if the bundled font can't be loaded
@@ -343,7 +343,7 @@ def ui_font(size=FONT_SIZE, bold=False):
 # Colour schemes (Settings > Appearance). Every theme has the same keys:
 #   face = window and button grey, hot = button under the mouse, text / hint / heading = text colours,
 #   field = inside text boxes, light / light2 / shadow / darkest = the 3D bevel edges (outer light, inner
-#   light, inner shadow, outer shadow), accent / accent_dark = the title strip fade (and Start, the
+#   light, inner shadow, outer shadow), accent / accent_dark = the highlight colour (Start, the
 #   sliders, progress, selections), good / warn / bad = status colours, dark = dark Windows title bar.
 def _theme(name, dark, face, hot, text, hint, heading, field, light, light2, shadow, darkest,
            accent, accent_dark, good, warn, bad):
@@ -1714,7 +1714,7 @@ def build_engine(entry, voice, status, prog, cancelled, speed=None):
 
 
 # --------------------------------------------------------------------------
-#  Retro look: bevels, the slider, the title strip, the theme tiles, the ttk theme
+#  Retro look: bevels, the slider, the theme tiles, the ttk theme
 # --------------------------------------------------------------------------
 # Bevel rings from the outside in, as (top-left colour, bottom-right colour) theme keys
 RAISED = (("light", "darkest"), ("light2", "shadow"))
@@ -1938,58 +1938,6 @@ class FlatSlider(tk.Canvas):
         self.create_rectangle(cx - p // 2, h // 3, cx - p // 2 + p, h - h // 3, fill=t["shadow"], outline="")
         if self.focused:
             self.create_rectangle(0, 0, w - 1, h - 1, outline=t["text"], dash=(1, 1))
-
-
-class RetroHeader(tk.Canvas):
-    """The coloured title strip at the top of RTTS's windows: a title, and on the main window a
-    Running / Stopped light."""
-
-    def __init__(self, master, title, show_state=False):
-        k = max(1.0, master.winfo_fpixels("1i") / 96.0)
-        self.p = pixel_scale(master)
-        super().__init__(master, height=int(round(30 * k)), highlightthickness=0, bd=0, takefocus=False)
-        self.title = title
-        self.show_state = show_state
-        self.running = False
-        self.t = THEMES[DEFAULT_THEME]
-        self.bind("<Configure>", lambda e: self.redraw())
-
-    def set_theme(self, t):
-        self.t = t
-        self.redraw()
-
-    def set_running(self, on):
-        if on != self.running:
-            self.running = on
-            self.redraw()
-
-    def redraw(self):
-        self.delete("all")
-        t, p = self.t, self.p
-        w = self.winfo_width()
-        if w <= 1:
-            w = int(float(self.cget("width")))
-        h = self.winfo_height()
-        if h <= 1:
-            h = int(float(self.cget("height")))
-        draw_gradient(self, 0, 0, w, h, t["accent_dark"], t["accent"])
-        # no icon here: Windows already shows it in the title bar right above
-        self.create_text(10 * p, h // 2, text=self.title, anchor="w", font=ui_font(10, True),
-                         fill=on_color(mix(t["accent_dark"], t["accent"], 0.15)))
-        if self.show_state:
-            label = "RUNNING" if self.running else "STOPPED"
-            pad = 6 * p
-            txt = self.create_text(w - pad - 4 * p, h // 2, text=label, anchor="e", font=ui_font(8, True),
-                                   fill=t["text"])
-            x0, y0, x1, y1 = self.bbox(txt)
-            led = 7 * p
-            cx0 = x0 - 4 * p - led - 5 * p                  # chip: [pad LED gap TEXT pad]
-            draw_bevel(self, cx0, y0 - 2 * p, w - pad, y1 + 2 * p, [(t[a], t[b]) for a, b in THIN_SUNKEN],
-                       t["face"], p)
-            ly = (y0 + y1) // 2 - led // 2
-            on = "#2EDC52" if self.running else t["shadow"]
-            self.create_rectangle(cx0 + 4 * p, ly, cx0 + 4 * p + led, ly + led, fill=on, outline=t["darkest"])
-            self.tag_raise(txt)
 
 
 class ThemeTile(tk.Canvas):
@@ -2276,7 +2224,6 @@ class App:
         self.settings_win = None
         self.theme = THEMES[DEFAULT_THEME]   # the colours in use (see apply_theme)
         self.theme_images = {}             # ttk theme name -> its bevel images (kept alive here)
-        self.headers = []                  # title strips to recolour when the theme changes
         self.tiles = {}                    # Settings > Appearance: theme key -> ThemeTile
         # text boxes and drop-down menus take Tk's default fonts, so those become the RTTS font too
         for name in ("TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont", "TkTooltipFont",
@@ -2345,12 +2292,8 @@ class App:
         self.v_speed_txt = tk.StringVar(value="100%")
         self.v_vol_txt = tk.StringVar(value="100")
 
-        self.header = RetroHeader(r, "RTTS.exe", show_state=True)
-        self.header.grid(row=0, column=0, sticky="ew")
-        self.headers.append(self.header)
-
         outer = ttk.Frame(r, padding=(12, 8, 12, 0))
-        outer.grid(row=1, column=0)
+        outer.grid(row=0, column=0)
 
         # Voice group
         g1 = ttk.LabelFrame(outer, text="Voice", padding=(10, 6))
@@ -2445,7 +2388,7 @@ class App:
         # Download progress: at the bottom, just above the status bar. Percentage and speed on the left.
         # Only shown while a voice file is downloading (show_progress_row); the window shrinks back after.
         pf = self.pf = ttk.Frame(r, padding=(12, 0, 12, 6))
-        pf.grid(row=2, column=0, sticky="ew")
+        pf.grid(row=1, column=0, sticky="ew")
         pf.columnconfigure(1, weight=1)
         ttk.Label(pf, textvariable=self.v_pct, width=19).grid(row=0, column=0, sticky="w")
         self.pb = ttk.Progressbar(pf, orient="horizontal", mode="determinate", maximum=100)
@@ -2453,7 +2396,7 @@ class App:
         pf.grid_remove()
 
         sf = ttk.Frame(r, padding=(4, 0, 4, 4))
-        sf.grid(row=3, column=0, sticky="ew")
+        sf.grid(row=2, column=0, sticky="ew")
         sf.columnconfigure(0, weight=1)
         ttk.Label(sf, textvariable=self.v_status, style="Status.TLabel", anchor="w").grid(row=0, column=0, sticky="ew")
 
@@ -2501,9 +2444,6 @@ class App:
         self.root.configure(bg=t["face"])
         for s in self.sliders:
             s.set_theme(t)
-        self.headers = [h for h in self.headers if h.winfo_exists()]
-        for h in self.headers:
-            h.set_theme(t)
         self.txt_log.configure(bg=t["field"], fg=t["text"], insertbackground=t["text"],
                                selectbackground=t["accent_dark"], selectforeground=on_color(t["accent_dark"]),
                                inactiveselectbackground=t["accent_dark"])
@@ -2538,12 +2478,8 @@ class App:
         self.apply_icon(w)
         w.protocol("WM_DELETE_WINDOW", self.close_settings)
 
-        w.columnconfigure(0, weight=1)
-        header = RetroHeader(w, "Settings")
-        header.grid(row=0, column=0, sticky="ew")
-        self.headers.append(header)
         outer = ttk.Frame(w, padding=(12, 8, 12, 8))
-        outer.grid(row=1, column=0)
+        outer.grid(row=0, column=0)
         nb = ttk.Notebook(outer)
         nb.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         general = ttk.Frame(nb, padding=(8, 8, 8, 2))
@@ -2629,7 +2565,7 @@ class App:
         self.cb_base.bind("<<ComboboxSelected>>", lambda e: self.set_custom_base(self.cb_base.get()))
         self.cb_base.grid(row=0, column=4, sticky="w", padx=(8, 0))
         ttk.Label(g2, style="Hint.TLabel", wraplength=400, justify="left",
-                  text="Pick any colour for the title strip, the Start button and the sliders. Base sets the "
+                  text="Pick any colour for the Start button, the sliders, headings and highlights. Base sets the "
                        "window colours: light grey or dark.").grid(row=1, column=0, columnspan=5, sticky="w",
                                                                    pady=(6, 0))
         self.update_tiles()
@@ -2782,10 +2718,6 @@ class App:
         win.transient(parent)
         self.apply_icon(win)
         win.configure(bg=self.theme["face"])
-        win.columnconfigure(0, weight=1)
-        header = RetroHeader(win, "Large model")
-        header.set_theme(self.theme)
-        header.grid(row=0, column=0, sticky="ew")
         answer = []
 
         def finish(ok):
@@ -2793,7 +2725,7 @@ class App:
             win.destroy()
 
         f = ttk.Frame(win, padding=(18, 14, 18, 14))
-        f.grid(row=1, column=0, sticky="nsew")
+        f.grid(row=0, column=0, sticky="nsew")
         f.columnconfigure(1, weight=1)
         ttk.Label(f, text="%s  %s is a large model (%s)" % (LARGE_MARK, entry["name"], entry["params"]),
                   style="Title.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
@@ -3572,7 +3504,6 @@ class App:
         if not self.apply_chat_key():
             return
         self.running = True
-        self.header.set_running(True)
         self.report_voice()
         if self.engine is None and not self.engine_ready.is_set():
             self.set_status("Running - voice engine is still loading, messages will be spoken once it's ready")
@@ -3591,7 +3522,6 @@ class App:
 
     def stop_app(self):
         self.running = False
-        self.header.set_running(False)
         self.cancel_capture()
         self.cancel_speech()
         self.set_status(self.ready_text() if self.engine_ready.is_set() else "Stopped")
@@ -3862,13 +3792,8 @@ class App:
         win.transient(self.root)
         win.configure(bg=self.theme["face"])
         self.apply_icon(win)
-        win.columnconfigure(0, weight=1)
-        header = RetroHeader(win, "Updating RTTS")
-        header.set_theme(self.theme)
-        header.grid(row=0, column=0, sticky="ew")
-        self.headers.append(header)        # Settings can stay open meanwhile, so follow theme changes
         f = ttk.Frame(win, padding=(14, 12))
-        f.grid(row=1, column=0)
+        f.grid(row=0, column=0)
         set_titlebar_dark(win, self.theme["dark"])
         v_text = tk.StringVar(value="Downloading RTTS %s ..." % rel["version"])
         ttk.Label(f, textvariable=v_text, width=46).grid(row=0, column=0, sticky="w")

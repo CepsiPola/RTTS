@@ -23,6 +23,9 @@ OutputDir=installer_output
 OutputBaseFilename=RTTS-Setup-{#AppVer}
 SetupIconFile=icon.ico
 UninstallDisplayIcon={app}\RTTS.exe
+; Tells Windows to reload icons when Setup finishes, so an update that changes RTTS's icon shows the new one
+; on the desktop and Start menu shortcuts right away (instead of an old copy from the icon cache)
+ChangesAssociations=yes
 UninstallDisplayName=RTTS
 Compression=lzma2
 SolidCompression=yes
