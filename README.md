@@ -2,7 +2,7 @@
 <p align="center"><img src="docs/images/logo.png" alt="RTTS logo" width="160"></p>
 -->
 
-<h1 align="center"><img src="docs/images/title.svg" alt="RTTS" height="80"></h1>
+<h1 align="center"><img src="docs/images/title.png" alt="RTTS" height="64"></h1>
 <p align="center"><b>Roblox Text-to-Speech</b><br>Type in Roblox chat. Be heard in voice chat.</p>
 
 <p align="center">
