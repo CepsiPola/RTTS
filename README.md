@@ -118,7 +118,7 @@ Orpheus runs in a helper program (llama.cpp's `llama-server`) that RTTS starts o
 
 ### Anonymous voice stats
 
-RTTS can send which voice you use (for example "Kokoro: af_heart"), so I can see which voices are popular and which are worth improving. It's **off unless you tick it**: the installer has an unticked "Send anonymous stats about which voice I use" box, and you can turn it on or off anytime in Settings > General > About and updates. Updates never change your choice.
+RTTS can send which voice you use (for example "Kokoro: af_heart"), so I can see which voices are popular and which are worth improving. It's **off unless you tick it**: the installer has an unticked "Send anonymous stats about which voice I use" box, and you can turn it on or off anytime in Settings > General > About and updates. Updates never change your choice, and running the installer again only turns stats on if you tick the box.
 
 That is the only thing it sends. It never sends what you type, what you hear, your Roblox username, your keybinds, your files, or anything that identifies you or your PC. Your IP address isn't stored or used to look up your location, and each launch gets a new random ID, so launches can't be linked together.
 
@@ -164,7 +164,7 @@ Run `installer.bat` to install the Python libraries RTTS needs (it doesn't insta
 
 ## Credits
 
-RTTS is built on great open-source work: [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) and [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx), [Piper](https://github.com/rhasspy/piper) and [piper-voices](https://huggingface.co/rhasspy/piper-voices), [espeak-ng](https://github.com/espeak-ng/espeak-ng), [Orpheus TTS](https://github.com/canopyai/Orpheus-TTS) by Canopy Labs (using [Unsloth's GGUF version](https://huggingface.co/unsloth/orpheus-3b-0.1-ft-GGUF)), [llama.cpp](https://github.com/ggml-org/llama.cpp), [SNAC](https://github.com/hubertsiuzdak/snac) (using the [ONNX version](https://huggingface.co/onnx-community/snac_24khz-ONNX)), and [VB-Cable](https://vb-audio.com/Cable/). Each project has its own license, so check them before redistributing anything.
+RTTS is built on great open-source work: [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) and [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx), [Piper](https://github.com/rhasspy/piper) and [piper-voices](https://huggingface.co/rhasspy/piper-voices), [espeak-ng](https://github.com/espeak-ng/espeak-ng), [Orpheus TTS](https://github.com/canopyai/Orpheus-TTS) by Canopy Labs (using [Unsloth's GGUF version](https://huggingface.co/unsloth/orpheus-3b-0.1-ft-GGUF)), [llama.cpp](https://github.com/ggml-org/llama.cpp), [SNAC](https://github.com/hubertsiuzdak/snac) (using the [ONNX version](https://huggingface.co/onnx-community/snac_24khz-ONNX)), and [VB-Cable](https://vb-audio.com/Cable/). RTTS's look uses the [Space Mono](https://github.com/googlefonts/spacemono) font, which ships with it under the SIL Open Font License (see `assets/fonts/OFL.txt`). Each project has its own license, so check them before redistributing anything.
 
 ## Disclaimer
 

@@ -44,7 +44,7 @@ RestartApplications=no
 ArchiveExtraction=full
 
 [Messages]
-WelcomeLabel2=This will install [name/ver] on your computer.%n%nRTTS speaks what you type in Roblox chat through a virtual microphone, so you can use voice chat without talking.%n%nYou can pick voices to download now, or let RTTS download them later.
+WelcomeLabel2=This will install [name/ver] on your computer.%n%nRTTS speaks what you type in Roblox chat through a virtual microphone, so you can use voice chat without talking.%n%nIt speaks 9 languages. You can pick English voices to download now, or let RTTS download any voice later.
 FinishedLabel=RTTS is installed.%n%nTo get started: in RTTS, set Output device to CABLE Input. Then in Roblox, set your microphone to CABLE Output. Press Start (F6) and type in chat.
 FinishedLabelNoIcons=RTTS is installed.%n%nTo get started: in RTTS, set Output device to CABLE Input. Then in Roblox, set your microphone to CABLE Output. Press Start (F6) and type in chat.
 
@@ -58,9 +58,9 @@ Name: "custom"; Description: "Custom: pick your voices"; Flags: iscustom
 Name: "app"; Description: "RTTS (required)"; Types: recommended everything novoices custom; Flags: fixed
 Name: "kokorobest"; Description: "Kokoro Best: very natural, best quality"; Types: recommended everything
 Name: "kokorofast"; Description: "Kokoro Faster: very natural, lighter"; Types: everything
-Name: "piperlow"; Description: "Piper Low: light and fast (Lessac)"; Types: everything
-Name: "pipermedium"; Description: "Piper Medium: good all-rounder (Lessac, Alba, Alan)"; Types: everything
-Name: "piperhigh"; Description: "Piper High: clearer (Ryan)"; Types: everything
+Name: "piperlow"; Description: "Piper Low: light and fast (English: Lessac)"; Types: everything
+Name: "pipermedium"; Description: "Piper Medium: good all-rounder (English: Lessac, Alba, Alan)"; Types: everything
+Name: "piperhigh"; Description: "Piper High: clearer (English: Ryan)"; Types: everything
 Name: "orpheus"; Description: "⚡ Orpheus: most realistic, needs a strong graphics card"; Types: everything
 
 [Tasks]
@@ -282,13 +282,12 @@ begin
     and FileExists(ModelsDir + '\' + LlamaDir + '\llama-server.exe') then
     SaveStringToFile(LlamaMarker, LlamaSha, False);
   { Voice stats: RTTS reads this file once on its next start, saves the choice in its settings and deletes it.
-    Silent installs (RTTS's own updater) don't write it, so an update never changes the choice made in Settings. }
-  if (CurStep = ssPostInstall) and not WizardSilent then begin
+    Only a ticked box is passed on: leaving it unticked (the default) keeps whatever is set in RTTS, so running
+    the installer again over RTTS never turns stats off. A new install has them off anyway. Silent installs
+    (RTTS's own updater) never write it. }
+  if (CurStep = ssPostInstall) and not WizardSilent and WizardIsTaskSelected('voicestats') then begin
     ForceDirectories(ExpandConstant('{userappdata}\RTTS'));
-    if WizardIsTaskSelected('voicestats') then
-      SaveStringToFile(ExpandConstant('{userappdata}\RTTS\voice_stats_choice.txt'), '1', False)
-    else
-      SaveStringToFile(ExpandConstant('{userappdata}\RTTS\voice_stats_choice.txt'), '0', False);
+    SaveStringToFile(ExpandConstant('{userappdata}\RTTS\voice_stats_choice.txt'), '1', False);
   end;
 end;
 

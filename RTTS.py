@@ -2,11 +2,13 @@
 RTTS (Roblox Text-to-Speech) - local AI voice edition.
 
 Type in Roblox chat as normal. When you press Enter, the message is also spoken
-with a realistic offline AI voice (Kokoro) into a virtual audio cable
-(VB-Cable), which Roblox voice chat uses as your microphone.
+by an offline voice into a virtual audio cable (VB-Cable), which Roblox voice
+chat uses as your microphone.
 
-Pick a voice model from the list. Every model runs on your own PC (no account, no
-API key, no internet after the one-time download).
+Pick a language and a voice model from the lists: eSpeak, Piper, Kokoro or Orpheus,
+in English, Spanish, French, Portuguese (Brazil), German, Hindi, Russian, Arabic or
+Chinese. Every model runs on your own PC (no account, no API key, no internet after
+the one-time download). RTTS's own text is translated in rtts_i18n.py.
 
 
 Made using AI
