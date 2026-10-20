@@ -445,28 +445,6 @@ def load_bundled_fonts():
     return ok
 
 
-# The RTTS icon on its 16 x 16 pixel grid: # outline, r red, h highlight, w white sound bars, . clear.
-ICON_PIXELS = (
-    "...##########...",
-    "..#rrrrrrrrrr#..",
-    ".#rhhhhhhrrrrr#.",
-    "#rhrrrrwwrrrrrr#",
-    "#rhrrrrwwrwwrrr#",
-    "#rhrwwrwwrwwrrr#",
-    "#rhrwwrwwrwwrrr#",
-    "#rrrwwrwwrwwrrr#",
-    "#rrrrrrwwrwwrrr#",
-    "#rrrrrrwwrrrrrr#",
-    ".#rrrrrrrrrrrr#.",
-    "..#rrrrrrrrrr#..",
-    "...#rrrr#####...",
-    "...#rr##........",
-    "....##..........",
-    "................",
-)
-ICON_COLORS = {"#": "#000000", "r": "#F3242F", "h": "#FF8A90", "w": "#FFFFFF"}
-
-
 def resource_path(name):
     """Find a bundled file: next to the script/exe, or inside a PyInstaller build."""
     bases = [APP_DIR]
@@ -1772,39 +1750,32 @@ def draw_gradient(cv, x0, y0, x1, y1, a, b, steps=48):
         cv.create_rectangle(xa, y0, xb, y1, fill=mix(a, b, i / float(max(1, steps - 1))), outline="")
 
 
-def draw_icon(cv, x, y, p=1):
-    """The RTTS pixel icon (16 x 16 retro pixels) with its top-left corner at x, y."""
-    for row, line in enumerate(ICON_PIXELS):
-        for col, ch in enumerate(line):
-            if ch in ICON_COLORS:
-                cv.create_rectangle(x + col * p, y + row * p, x + (col + 1) * p, y + (row + 1) * p,
-                                    fill=ICON_COLORS[ch], outline="")
-
-
 def on_color(bg):
     """Black or white, whichever reads better on bg."""
     return "#FFFFFF" if contrast("#FFFFFF", bg) >= contrast("#000000", bg) else "#000000"
 
 
-def bevel_image(master, size, rings, center, p, extra_w=0):
-    """A square PhotoImage of a bevelled box (rings of theme colours, each p pixels wide).
+BEVEL_W, BEVEL_H = 320, 96          # bevel image size: most widgets are filled with 1-6 copies of it
 
+
+def bevel_image(master, w, h, rings, center, p, extra_w=0):
+    """A w x h PhotoImage of a bevelled box (rings of theme colours, each p pixels wide), filled with `center`.
+
+    ttk fills a widget by repeating the middle of its image one copy at a time, so these images are made large
+    (BEVEL_W x BEVEL_H): with a tiny middle, one repaint took thousands of copies and froze the window.
     extra_w adds that many clear pixels on the right (a gap before a check box's text)."""
-    n = size
-    rows = []
-    for y in range(n):
-        row = []
-        for x in range(n):
-            d = min(x, y, n - 1 - x, n - 1 - y)
-            ring = d // p
-            if ring < len(rings):
-                tl, br = rings[ring]
-                row.append(tl if min(x, y) < min(n - 1 - x, n - 1 - y) else br)
-            else:
-                row.append(center)
-        rows.append(row)
-    img = tk.PhotoImage(master=master, width=n + extra_w, height=n)
-    img.put(" ".join("{%s}" % " ".join(r) for r in rows), to=(0, 0))
+    img = tk.PhotoImage(master=master, width=w + extra_w, height=h)
+    img.put(center, to=(0, 0, w, h))
+    o = 0
+    for tl, br in rings:
+        for _ in range(p):
+            if w - 2 * o <= 0 or h - 2 * o <= 0:
+                break
+            img.put(tl, to=(o, o, w - 1 - o, o + 1))              # top (its right end belongs to the right side)
+            img.put(tl, to=(o, o, o + 1, h - 1 - o))              # left (its bottom end belongs to the bottom)
+            img.put(br, to=(o, h - 1 - o, w - o, h - o))          # bottom
+            img.put(br, to=(w - 1 - o, o, w - o, h - o))          # right
+            o += 1
     return img
 
 
@@ -1814,7 +1785,7 @@ CHECK_MARK = ("......#", ".....##", "#...###", "##.###.", "#####..", ".###...", 
 def check_image(master, t, p, checked, center, mark):
     """A 13 x 13 (retro pixel) check box, sunken, with the tick drawn in `mark` when checked."""
     rings = [(t[a], t[b]) for a, b in SUNKEN]
-    img = bevel_image(master, 13 * p, rings, center, p, extra_w=5 * p)
+    img = bevel_image(master, 13 * p, 13 * p, rings, center, p, extra_w=5 * p)
     if checked:
         for row, line in enumerate(CHECK_MARK):
             for col, ch in enumerate(line):
@@ -1970,8 +1941,8 @@ class FlatSlider(tk.Canvas):
 
 
 class RetroHeader(tk.Canvas):
-    """The coloured title strip at the top of RTTS's windows: the pixel icon, a title, and on the main
-    window a Running / Stopped light."""
+    """The coloured title strip at the top of RTTS's windows: a title, and on the main window a
+    Running / Stopped light."""
 
     def __init__(self, master, title, show_state=False):
         k = max(1.0, master.winfo_fpixels("1i") / 96.0)
@@ -2002,11 +1973,9 @@ class RetroHeader(tk.Canvas):
         if h <= 1:
             h = int(float(self.cget("height")))
         draw_gradient(self, 0, 0, w, h, t["accent_dark"], t["accent"])
-        iy = (h - 15 * p) // 2
-        draw_icon(self, 7 * p, iy, p)
-        tx = 7 * p + 16 * p + 6 * p
-        self.create_text(tx, h // 2, text=self.title, anchor="w", font=ui_font(10, True),
-                         fill=on_color(mix(t["accent_dark"], t["accent"], 0.25)))
+        # no icon here: Windows already shows it in the title bar right above
+        self.create_text(10 * p, h // 2, text=self.title, anchor="w", font=ui_font(10, True),
+                         fill=on_color(mix(t["accent_dark"], t["accent"], 0.15)))
         if self.show_state:
             label = "RUNNING" if self.running else "STOPPED"
             pad = 6 * p
@@ -2103,25 +2072,29 @@ def ensure_retro_theme(root, st, key, t, images):
         return name
     p = pixel_scale(root)
     b = 2 * p                                    # two bevel rings
-    n = 2 * b + 2
+    n = 2 * b + 2                                # the smallest a bevelled box can be (its requested size)
+    bw, bh = BEVEL_W * p, BEVEL_H * p
 
     def rings(spec):
         return [(t[a], t[c]) for a, c in spec]
 
+    def bevel(spec_rings, center):
+        return bevel_image(root, bw, bh, spec_rings, center, p)
+
     acc_rings = [(mix(t["accent"], "#FFFFFF", 0.45), t["darkest"]), (mix(t["accent"], "#FFFFFF", 0.2), t["accent_dark"])]
     acc_down = [(t["darkest"], mix(t["accent"], "#FFFFFF", 0.45)), (t["accent_dark"], mix(t["accent"], "#FFFFFF", 0.2))]
     img = {
-        "btn": bevel_image(root, n, rings(RAISED), t["face"], p),
-        "btn_hot": bevel_image(root, n, rings(RAISED), t["hot"], p),
-        "btn_down": bevel_image(root, n, rings(SUNKEN), t["face"], p),
-        "acc": bevel_image(root, n, acc_rings, t["accent"], p),
-        "acc_hot": bevel_image(root, n, acc_rings, mix(t["accent"], "#FFFFFF", 0.12), p),
-        "acc_down": bevel_image(root, n, acc_down, t["accent"], p),
-        "acc_dis": bevel_image(root, n, rings(RAISED), t["face"], p),
-        "field": bevel_image(root, n, rings(SUNKEN), t["field"], p),
-        "field_dis": bevel_image(root, n, rings(SUNKEN), t["face"], p),
-        "group": bevel_image(root, n, rings(ETCHED), t["face"], p),
-        "status": bevel_image(root, 2 * p + 2, rings(THIN_SUNKEN), t["face"], p),
+        "btn": bevel(rings(RAISED), t["face"]),
+        "btn_hot": bevel(rings(RAISED), t["hot"]),
+        "btn_down": bevel(rings(SUNKEN), t["face"]),
+        "acc": bevel(acc_rings, t["accent"]),
+        "acc_hot": bevel(acc_rings, mix(t["accent"], "#FFFFFF", 0.12)),
+        "acc_down": bevel(acc_down, t["accent"]),
+        "acc_dis": bevel(rings(RAISED), t["face"]),
+        "field": bevel(rings(SUNKEN), t["field"]),
+        "field_dis": bevel(rings(SUNKEN), t["face"]),
+        "group": bevel(rings(ETCHED), t["face"]),
+        "status": bevel(rings(THIN_SUNKEN), t["face"]),
         "chk_off": check_image(root, t, p, False, t["field"], t["text"] if t["dark"] else "#000000"),
         "chk_on": check_image(root, t, p, True, t["field"], t["text"] if t["dark"] else "#000000"),
         "chk_off_dis": check_image(root, t, p, False, t["face"], t["shadow"]),
@@ -2129,30 +2102,37 @@ def ensure_retro_theme(root, st, key, t, images):
         "chk_off_down": check_image(root, t, p, False, t["face"], t["text"]),
         "chk_on_down": check_image(root, t, p, True, t["face"], t["text"] if t["dark"] else "#000000"),
     }
-    # progress: blocks of the accent colour with gaps, repeated along the bar
-    blk = tk.PhotoImage(master=root, width=8 * p, height=1)
-    blk.put(t["accent"], to=(0, 0, 6 * p, 1))
-    blk.put(t["field"], to=(6 * p, 0, 8 * p, 1))
+    # progress: blocks of the accent colour with gaps (6 on, 2 off), repeated along the bar; wide and tall so
+    # a whole bar takes only a couple of copies
+    blk = tk.PhotoImage(master=root, width=8 * p * 40, height=48 * p)
+    blk.put(t["accent"], to=(0, 0, 8 * p * 40, 48 * p))
+    for i in range(40):
+        blk.put(t["field"], to=(i * 8 * p + 6 * p, 0, (i + 1) * 8 * p, 48 * p))
     img["pbar"] = blk
     images[name] = img
 
+    # width / height give each element its small requested size; without them the big image would set the
+    # smallest size of every button and box
     st.theme_create(name, parent="clam")
     st.theme_use(name)
     st.element_create("Retro.Button.border", "image", img["btn"], ("disabled", img["btn"]),
-                      ("pressed", img["btn_down"]), ("active", img["btn_hot"]), border=b, sticky="nsew")
+                      ("pressed", img["btn_down"]), ("active", img["btn_hot"]), border=b, width=n, height=n,
+                      sticky="nsew")
     st.element_create("Retro.Accent.border", "image", img["acc"], ("disabled", img["acc_dis"]),
-                      ("pressed", img["acc_down"]), ("active", img["acc_hot"]), border=b, sticky="nsew")
+                      ("pressed", img["acc_down"]), ("active", img["acc_hot"]), border=b, width=n, height=n,
+                      sticky="nsew")
     st.element_create("Retro.Field.border", "image", img["field"], ("disabled", img["field_dis"]),
-                      border=b, sticky="nsew")
-    st.element_create("Retro.Group.border", "image", img["group"], border=b, sticky="nsew")
-    st.element_create("Retro.Status.border", "image", img["status"], border=p, sticky="nsew")
+                      border=b, width=n, height=n, sticky="nsew")
+    st.element_create("Retro.Group.border", "image", img["group"], border=b, width=n, height=n, sticky="nsew")
+    st.element_create("Retro.Status.border", "image", img["status"], border=p, width=2 * p + 2,
+                      height=2 * p + 2, sticky="nsew")
     st.element_create("Retro.Check.indicator", "image", img["chk_off"],
                       ("disabled", "selected", img["chk_on_dis"]), ("disabled", img["chk_off_dis"]),
                       ("pressed", "selected", img["chk_on_down"]), ("pressed", img["chk_off_down"]),
                       ("selected", img["chk_on"]), sticky="")
-    st.element_create("Retro.Progress.trough", "image", img["field"], border=b, padding=b + p,
+    st.element_create("Retro.Progress.trough", "image", img["field"], border=b, padding=b + p, width=n,
                       height=int(round(18 * root.winfo_fpixels("1i") / 96.0)), sticky="nsew")
-    st.element_create("Retro.Progress.pbar", "image", img["pbar"], border=0, sticky="nsew")
+    st.element_create("Retro.Progress.pbar", "image", img["pbar"], border=0, width=1, height=1, sticky="nsew")
 
     def button(border):
         return [(border, {"sticky": "nswe", "children": [
@@ -2528,7 +2508,10 @@ class App:
                                selectbackground=t["accent_dark"], selectforeground=on_color(t["accent_dark"]),
                                inactiveselectbackground=t["accent_dark"])
         # the drop-down list of the comboboxes is a plain Tk listbox
-        for cb in (self.cb_voice, self.cb_model, self.cb_out):
+        combos = [self.cb_voice, self.cb_model, self.cb_out]
+        if self.tiles:                     # Settings is open: its Base menu too
+            combos.append(self.cb_base)
+        for cb in combos:
             try:
                 lb = "%s.f.l" % self.root.tk.call("ttk::combobox::PopdownWindow", cb)
                 self.root.tk.call(lb, "configure", "-background", t["field"], "-foreground", t["text"],
