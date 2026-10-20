@@ -3,7 +3,7 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 title RTTS - Make installer
 
-echo RTTS - make RTTS-Setup.exe
+echo RTTS - make the RTTS installer
 echo.
 
 if not exist "dist\RTTS\RTTS.exe" (
@@ -25,19 +25,20 @@ if not defined ISCC (
 )
 
 echo [-] Building the installer...
+if exist "installer_output\RTTS-Setup-*.exe" del /q "installer_output\RTTS-Setup-*.exe"
 "%ISCC%" "RTTS.iss"
 if errorlevel 1 (
     echo [ERROR] Inno Setup reported an error. Scroll up to see why.
     goto error
 )
 
-if not exist "installer_output\RTTS-Setup.exe" (
-    echo [ERROR] RTTS-Setup.exe was not created.
+if not exist "installer_output\RTTS-Setup-*.exe" (
+    echo [ERROR] The installer was not created.
     goto error
 )
 
 echo.
-echo [SUCCESS] Installer ready: installer_output\RTTS-Setup.exe
+for %%f in ("installer_output\RTTS-Setup-*.exe") do echo [SUCCESS] Installer ready: installer_output\%%~nxf
 explorer "installer_output"
 goto end
 

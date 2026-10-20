@@ -39,7 +39,7 @@ It plays the voice through a virtual microphone ([VB-Cable](https://vb-audio.com
 
 First, install VB-Cable from [vb-audio.com/Cable](https://vb-audio.com/Cable/). Restart your computer when prompted to finish.
 
-Next, download `RTTS-Setup.exe` from [Releases](../../releases/latest) and run it
+Next, download `RTTS-Setup-<version>.exe` from [Releases](../../releases/latest) and run it. The installer checks for VB-Cable, and lets you pick voices to download right away. Installing a new version over an old one keeps your voices and settings.
 
 Open RTTS and set **Output device** to **CABLE Input**. Then, in Roblox, set your microphone to **CABLE Output**.
 
@@ -78,7 +78,7 @@ No, Windows only for now
 
 You need Windows and Python 3.10 or newer (tick *Add python.exe to PATH* and *tcl/tk* when installing).
 
-Run `installer.bat` to install the Python libraries RTTS needs (it doesn't install the app). Use `start.bat` to run RTTS straight from the source, `build.bat` to build `dist\RTTS\RTTS.exe`, and `make_installer.bat` to build `installer_output\RTTS-Setup.exe`, which needs [Inno Setup 6](https://jrsoftware.org/isdl.php).
+Run `installer.bat` to install the Python libraries RTTS needs (it doesn't install the app). Use `start.bat` to run RTTS straight from the source, `build.bat` to build `dist\RTTS\RTTS.exe`, and `make_installer.bat` to build `installer_output\RTTS-Setup-<version>.exe` (set the version at the top of `RTTS.iss`), which needs [Inno Setup 6](https://jrsoftware.org/isdl.php).
 
 ## Credits
 
