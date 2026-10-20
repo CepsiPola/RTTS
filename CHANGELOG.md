@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.0
+
+**New look**
+- RTTS has a new retro design: raised grey buttons, sunken text boxes, a red title strip with the new pixel icon, block progress bars, and the Space Mono font (it comes with RTTS, so nothing needs installing).
+- The title strip shows whether RTTS is **RUNNING** or **STOPPED**.
+- New icon for the app, the installer and the taskbar, and new artwork in the installer.
+
+**New: colour themes**
+- Settings > Appearance has 7 themes: Classic, Midnight, Ocean, Grape, Bubblegum, Terminal and Amber. Click one to switch right away.
+- **Match Windows** uses Classic or Midnight to follow Windows' light or dark mode.
+- **Custom** lets you pick any colour for the title strip, the Start button and the sliders, on a light or dark base.
+- If you used the Light or Dark theme before, you get Classic or Midnight.
+
 ## 1.0.1
 
 **New: optional anonymous voice stats**

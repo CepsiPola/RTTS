@@ -17,8 +17,9 @@
 - **Robotic to realistic:** 7 voice models, from tiny eSpeak to ⚡ Orpheus.
 - **Roblox hears it as your mic:** the voice plays through [VB-Cable](https://vb-audio.com/Cable/).
 - **Stays up to date:** checks for a new version every time it starts.
+- **Your colours:** a retro look with 7 colour themes, or pick your own in **Settings > Appearance**.
 
-<p align="center"><img src="docs/images/screenshot.png" alt="The RTTS window" width="460"></p>
+<p align="center"><img src="docs/images/screenshot.png" alt="The RTTS window" width="480"></p>
 
 ## Why local?
 
@@ -90,7 +91,7 @@ Voice chat has to be turned on for your Roblox account.
 
 **2. Press Start in RTTS.** Click **Start (F6)**, or press F6. Press **Stop (F7)** when you're done. You can change both keys in **Settings > Keybinds**.
 
-<p align="center"><img src="docs/images/howto-2-start.png" alt="The Start (F6) button in RTTS" width="420"></p>
+<p align="center"><img src="docs/images/howto-2-start.png" alt="The Start (F6) button in RTTS" width="520"></p>
 
 **3. Make sure Roblox is listening to VB-Cable.** In Roblox, press Esc, go to **Settings**, and set **Input Device** to **CABLE Output (VB-Audio Virtual Cable)**.
 

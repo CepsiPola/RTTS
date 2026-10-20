@@ -1,6 +1,6 @@
 ﻿; Inno Setup script for RTTS. Build it with make_installer.bat (after build.bat).
 ; Change the version here when you release a new one.
-#define AppVer "1.0.1"
+#define AppVer "1.1.0"
 
 [Setup]
 AppId={{8F3A5C2E-6B1D-4E7A-9C40-2D5E7A1B3F68}
@@ -27,6 +27,13 @@ UninstallDisplayName=RTTS
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern dynamic
+; The retro RTTS artwork: a tall picture on the Welcome / Finish pages and the icon at the top right of the
+; other pages (each with a 200% copy for high-DPI screens; the small one is see-through for light and dark)
+WizardImageFile=assets\installer\wizard-image-100.png,assets\installer\wizard-image-200.png
+WizardSmallImageFile=assets\installer\wizard-small-100.png,assets\installer\wizard-small-200.png
+; "dynamic" follows Windows dark mode, which has its own image settings: use the same artwork there
+WizardImageFileDynamicDark=assets\installer\wizard-image-100.png,assets\installer\wizard-image-200.png
+WizardSmallImageFileDynamicDark=assets\installer\wizard-small-100.png,assets\installer\wizard-small-200.png
 ; Updating: installing a new version over an old one closes RTTS first. Voices and settings are kept.
 CloseApplications=yes
 RestartApplications=no

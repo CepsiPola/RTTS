@@ -41,10 +41,11 @@ if sys.stderr is None:
     sys.stderr = open(os.devnull, "w")
 
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import colorchooser, messagebox, ttk
+from tkinter import font as tkfont
 
 APP_TITLE = "RTTS"
-APP_VERSION = "1.0.1"      # keep the same as AppVer in RTTS.iss
+APP_VERSION = "1.1.0"      # keep the same as AppVer in RTTS.iss
 USER_AGENT = "RTTS/" + APP_VERSION
 GITHUB_REPO = "CepsiPola/RTTS"
 REPO_URL = "https://github.com/" + GITHUB_REPO
@@ -320,21 +321,150 @@ DEFAULTS = {
     "skip_emojis": False,
     "auto_update": False,      # install new versions without asking (Settings > About and updates)
     "voice_stats": False,      # send which voice is used, nothing else (opt-in; installer tick or Settings)
-    "theme": "light",          # light / dark / system
+    "theme": "classic",        # a THEMES key, "system" (Classic or Midnight to match Windows) or "custom"
+    "custom_accent": "#F3242F",   # the Custom theme: its colour, on a light or dark base
+    "custom_base": "light",
     "topmost": False,
     "start_key": "f6",         # Start / Stop hotkeys (pynput key names), set in Settings > Keybinds
     "stop_key": "f7",
 }
 
-FONT = ("Segoe UI", 9)
-THEME_CHOICES = (("Light", "light"), ("Dark", "dark"), ("Match Windows", "system"))
+# The look: retro desktop windows (raised grey buttons, sunken white fields, a coloured title strip) in
+# Space Mono, which ships with RTTS in assets/fonts (SIL Open Font License, see assets/fonts/OFL.txt).
+FONT_FILES = ("SpaceMono-Regular.ttf", "SpaceMono-Bold.ttf")
+UI_FAMILY = "Space Mono"           # main() falls back to Consolas if the bundled font can't be loaded
+FONT_SIZE = 9
 
-# Dark palette (light mode keeps the normal Windows look, so it has no palette).
-DARK = {
-    "bg": "#202020", "fg": "#e8e8e8", "field": "#2d2d2d", "button": "#383838",
-    "button_hot": "#454545", "border": "#4a4a4a", "accent": "#3b78b8",
-    "disabled": "#808080", "trough": "#2d2d2d",
+
+def ui_font(size=FONT_SIZE, bold=False):
+    return (UI_FAMILY, size, "bold") if bold else (UI_FAMILY, size)
+
+
+# Colour schemes (Settings > Appearance). Every theme has the same keys:
+#   face = window and button grey, hot = button under the mouse, text / hint / heading = text colours,
+#   field = inside text boxes, light / light2 / shadow / darkest = the 3D bevel edges (outer light, inner
+#   light, inner shadow, outer shadow), accent / accent_dark = the title strip fade (and Start, the
+#   sliders, progress, selections), good / warn / bad = status colours, dark = dark Windows title bar.
+def _theme(name, dark, face, hot, text, hint, heading, field, light, light2, shadow, darkest,
+           accent, accent_dark, good, warn, bad):
+    return dict(name=name, dark=dark, face=face, hot=hot, text=text, hint=hint, heading=heading, field=field,
+                light=light, light2=light2, shadow=shadow, darkest=darkest, accent=accent,
+                accent_dark=accent_dark, good=good, warn=warn, bad=bad)
+
+
+THEMES = {
+    "classic": _theme("Classic", False, "#C0C0C0", "#CCCCCC", "#000000", "#333333", "#8E0E16", "#FFFFFF",
+                      "#FFFFFF", "#DFDFDF", "#808080", "#000000", "#F3242F", "#7A0A12",
+                      "#0F5A1E", "#6B3A00", "#8E0E16"),
+    "midnight": _theme("Midnight", True, "#2A2D36", "#353945", "#F0F0F0", "#B3B7C2", "#FF7A82", "#14161C",
+                       "#4E5361", "#3B3F4B", "#17191F", "#000000", "#F3242F", "#7A0A12",
+                       "#6FCF7F", "#F0B050", "#FF7B72"),
+    "ocean": _theme("Ocean", False, "#C0C0C0", "#CCCCCC", "#000000", "#333333", "#00006E", "#FFFFFF",
+                    "#FFFFFF", "#DFDFDF", "#808080", "#000000", "#1084D0", "#000080",
+                    "#0F5A1E", "#6B3A00", "#8E0E16"),
+    "grape": _theme("Grape", False, "#CBC5DB", "#D6D1E3", "#000000", "#35304A", "#43207F", "#FFFFFF",
+                    "#FFFFFF", "#E4E0EE", "#837C99", "#000000", "#8A5CE6", "#3B1E7A",
+                    "#0F5A1E", "#6B3A00", "#8E0E16"),
+    "bubblegum": _theme("Bubblegum", False, "#F0D3E1", "#F6E0EA", "#000000", "#4A2A3A", "#7A1442", "#FFFFFF",
+                        "#FFFFFF", "#F9E9F1", "#B07F97", "#3A0A20", "#E0408A", "#7A1442",
+                        "#0F5A1E", "#6B3A00", "#8E0E16"),
+    "terminal": _theme("Terminal", True, "#0F1A12", "#16261A", "#7CFF8A", "#4FC25E", "#B6FFBE", "#000000",
+                       "#2E4A33", "#22382A", "#060C07", "#000000", "#1FA83A", "#0B4D19",
+                       "#7CFF8A", "#F0D050", "#FF7B72"),
+    "amber": _theme("Amber", True, "#1E1810", "#2A2216", "#FFC861", "#D9A548", "#FFE0A0", "#0C0904",
+                    "#4A3D24", "#372D1A", "#0A0805", "#000000", "#E89B12", "#7A4A00",
+                    "#9BE07A", "#FFC861", "#FF8A6E"),
 }
+DEFAULT_THEME = "classic"
+LEGACY_THEMES = {"light": "classic", "dark": "midnight"}     # the 1.0 Light / Dark choices
+THEME_TILES = list(THEMES) + ["system", "custom"]            # the order of the tiles in Settings > Appearance
+HEX_COLOR = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+
+def _rgb(c):
+    return int(c[1:3], 16), int(c[3:5], 16), int(c[5:7], 16)
+
+
+def _hex(r, g, b):
+    return "#%02X%02X%02X" % tuple(max(0, min(255, int(round(v)))) for v in (r, g, b))
+
+
+def mix(a, b, t):
+    """The colour t of the way from a to b (0 = a, 1 = b)."""
+    (r1, g1, b1), (r2, g2, b2) = _rgb(a), _rgb(b)
+    return _hex(r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t)
+
+
+def luminance(c):
+    def lin(v):
+        v /= 255.0
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+    r, g, b = _rgb(c)
+    return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+
+
+def contrast(a, b):
+    la, lb = sorted((luminance(a), luminance(b)), reverse=True)
+    return (la + 0.05) / (lb + 0.05)
+
+
+def readable_on(bg, color, toward):
+    """Move `color` toward `toward` (black or white) until it reads well on `bg` (WCAG 4.5:1)."""
+    for i in range(11):
+        c = mix(color, toward, i / 10.0)
+        if contrast(c, bg) >= 4.5:
+            return c
+    return toward
+
+
+def custom_theme(accent, base):
+    """The Custom theme: Classic or Midnight with the picked colour as the accent."""
+    t = dict(THEMES["midnight" if base == "dark" else "classic"])
+    t["name"] = "Custom"
+    t["accent"] = accent
+    t["accent_dark"] = mix(accent, "#000000", 0.5)
+    t["heading"] = readable_on(t["face"], accent, "#FFFFFF" if t["dark"] else "#000000")
+    return t
+
+
+def load_bundled_fonts():
+    """Make the fonts in assets/fonts usable by this process only (nothing is installed on the PC)."""
+    if not IS_WIN:
+        return False
+    ok = False
+    for name in FONT_FILES:
+        f = resource_path("assets/fonts/" + name)
+        if f is None:
+            continue
+        try:
+            # FR_PRIVATE (0x10): only RTTS sees the font, and Windows forgets it when RTTS closes
+            if ctypes.windll.gdi32.AddFontResourceExW(ctypes.c_wchar_p(str(f)), 0x10, 0) > 0:
+                ok = True
+        except Exception:
+            log_error(traceback.format_exc())
+    return ok
+
+
+# The RTTS icon on its 16 x 16 pixel grid: # outline, r red, h highlight, w white sound bars, . clear.
+ICON_PIXELS = (
+    "...##########...",
+    "..#rrrrrrrrrr#..",
+    ".#rhhhhhhrrrrr#.",
+    "#rhrrrrwwrrrrrr#",
+    "#rhrrrrwwrwwrrr#",
+    "#rhrwwrwwrwwrrr#",
+    "#rhrwwrwwrwwrrr#",
+    "#rrrwwrwwrwwrrr#",
+    "#rrrrrrwwrwwrrr#",
+    "#rrrrrrwwrrrrrr#",
+    ".#rrrrrrrrrrrr#.",
+    "..#rrrrrrrrrr#..",
+    "...#rrrr#####...",
+    "...#rr##........",
+    "....##..........",
+    "................",
+)
+ICON_COLORS = {"#": "#000000", "r": "#F3242F", "h": "#FF8A90", "w": "#FFFFFF"}
 
 
 def resource_path(name):
@@ -1606,29 +1736,109 @@ def build_engine(entry, voice, status, prog, cancelled, speed=None):
 
 
 # --------------------------------------------------------------------------
-#  Slider (drawn by hand so it looks the same in the light and the dark theme)
+#  Retro look: bevels, the slider, the title strip, the theme tiles, the ttk theme
 # --------------------------------------------------------------------------
+# Bevel rings from the outside in, as (top-left colour, bottom-right colour) theme keys
+RAISED = (("light", "darkest"), ("light2", "shadow"))
+SUNKEN = (("shadow", "light"), ("darkest", "light2"))
+ETCHED = (("shadow", "light"), ("light", "shadow"))
+THIN_SUNKEN = (("shadow", "light"),)
+
+
+def pixel_scale(widget):
+    """Whole-pixel size of one "retro pixel": 1 at 100-125% Windows scaling, 2 at 150-200%, and so on."""
+    return max(1, int(round(widget.winfo_fpixels("1i") / 96.0)))
+
+
+def draw_bevel(cv, x0, y0, x1, y1, rings, fill, p=1):
+    """Draw a bevelled box on a canvas covering pixels x0..x1-1, y0..y1-1. `rings` hold colours, p = ring width."""
+    for tl, br in rings:
+        for _ in range(p):
+            cv.create_rectangle(x0, y0, x1 - 1, y0 + 1, fill=tl, outline="")        # top
+            cv.create_rectangle(x0, y0, x0 + 1, y1 - 1, fill=tl, outline="")        # left
+            cv.create_rectangle(x0, y1 - 1, x1, y1, fill=br, outline="")            # bottom
+            cv.create_rectangle(x1 - 1, y0, x1, y1, fill=br, outline="")            # right
+            x0, y0, x1, y1 = x0 + 1, y0 + 1, x1 - 1, y1 - 1
+    if fill and x1 > x0 and y1 > y0:
+        cv.create_rectangle(x0, y0, x1, y1, fill=fill, outline="")
+
+
+def draw_gradient(cv, x0, y0, x1, y1, a, b, steps=48):
+    """Left-to-right fade from colour a to colour b."""
+    steps = max(1, min(steps, x1 - x0))
+    for i in range(steps):
+        xa = x0 + (x1 - x0) * i // steps
+        xb = x0 + (x1 - x0) * (i + 1) // steps
+        cv.create_rectangle(xa, y0, xb, y1, fill=mix(a, b, i / float(max(1, steps - 1))), outline="")
+
+
+def draw_icon(cv, x, y, p=1):
+    """The RTTS pixel icon (16 x 16 retro pixels) with its top-left corner at x, y."""
+    for row, line in enumerate(ICON_PIXELS):
+        for col, ch in enumerate(line):
+            if ch in ICON_COLORS:
+                cv.create_rectangle(x + col * p, y + row * p, x + (col + 1) * p, y + (row + 1) * p,
+                                    fill=ICON_COLORS[ch], outline="")
+
+
+def on_color(bg):
+    """Black or white, whichever reads better on bg."""
+    return "#FFFFFF" if contrast("#FFFFFF", bg) >= contrast("#000000", bg) else "#000000"
+
+
+def bevel_image(master, size, rings, center, p, extra_w=0):
+    """A square PhotoImage of a bevelled box (rings of theme colours, each p pixels wide).
+
+    extra_w adds that many clear pixels on the right (a gap before a check box's text)."""
+    n = size
+    rows = []
+    for y in range(n):
+        row = []
+        for x in range(n):
+            d = min(x, y, n - 1 - x, n - 1 - y)
+            ring = d // p
+            if ring < len(rings):
+                tl, br = rings[ring]
+                row.append(tl if min(x, y) < min(n - 1 - x, n - 1 - y) else br)
+            else:
+                row.append(center)
+        rows.append(row)
+    img = tk.PhotoImage(master=master, width=n + extra_w, height=n)
+    img.put(" ".join("{%s}" % " ".join(r) for r in rows), to=(0, 0))
+    return img
+
+
+CHECK_MARK = ("......#", ".....##", "#...###", "##.###.", "#####..", ".###...", "..#....")
+
+
+def check_image(master, t, p, checked, center, mark):
+    """A 13 x 13 (retro pixel) check box, sunken, with the tick drawn in `mark` when checked."""
+    rings = [(t[a], t[b]) for a, b in SUNKEN]
+    img = bevel_image(master, 13 * p, rings, center, p, extra_w=5 * p)
+    if checked:
+        for row, line in enumerate(CHECK_MARK):
+            for col, ch in enumerate(line):
+                if ch == "#":
+                    x, y = (3 + col) * p, (3 + row) * p
+                    img.put(mark, to=(x, y, x + p, y + p))
+    return img
+
+
 class FlatSlider(tk.Canvas):
-    """Horizontal slider: a flat track and a grey handle with grip lines, coloured for the light or dark theme.
+    """Horizontal slider in the retro style: a sunken groove, filled with the accent colour up to a raised handle.
 
     Works like ttk.Scale for what RTTS needs: `variable` (a DoubleVar) holds the value, `command`
     is called after the user moves it. Values are whole numbers from `from_` to `to`."""
 
-    COLORS = {
-        "dark": dict(trough="#3c3c3c", border=DARK["border"], focus=DARK["accent"], thumb="#8c8c8c",
-                     thumb_hot="#b0b0b0", grip_dark="#5a5a5a", grip_light="#bdbdbd"),
-        "light": dict(trough="#e6e6e6", border="#c4c4c4", focus="#0078d7", thumb="#cdcdcd",
-                      thumb_hot="#b8b8b8", grip_dark="#8c8c8c", grip_light="#f4f4f4"),
-    }
-
     def __init__(self, master, from_, to, variable, command=None, width=100):
         k = max(1.0, master.winfo_fpixels("1i") / 96.0)      # follow Windows display scaling
         self.k = k
-        self.thumb_w = int(round(30 * k))
-        super().__init__(master, width=width, height=int(round(18 * k)), highlightthickness=0, bd=0,
+        self.p = pixel_scale(master)
+        self.thumb_w = int(round(13 * k))
+        super().__init__(master, width=width, height=int(round(22 * k)), highlightthickness=0, bd=0,
                          takefocus=True)
         self.lo, self.hi = float(from_), float(to)
-        self.c = self.COLORS["dark"]
+        self.t = THEMES[DEFAULT_THEME]
         self.var = variable
         self.command = command
         self.hot = False                  # mouse is over the handle (or dragging it)
@@ -1728,10 +1938,10 @@ class FlatSlider(tk.Canvas):
         self._set(value)
         return "break"
 
-    def set_bg(self, color, dark=True):
-        """Follow the theme: `color` is the window background around the track, `dark` picks the track colours."""
-        self.c = self.COLORS["dark" if dark else "light"]
-        self.configure(bg=color)
+    def set_theme(self, t):
+        """Recolour for the theme `t` (a THEMES-style dict)."""
+        self.t = t
+        self.configure(bg=t["face"])
         self.redraw()
 
     # ---- drawing ----
@@ -1741,18 +1951,292 @@ class FlatSlider(tk.Canvas):
         h = self.winfo_height()
         if h <= 1:
             h = int(float(self.cget("height")))
-        c = self.c
-        self.create_rectangle(0, 0, w - 1, h - 1, fill=c["trough"],
-                              outline=c["focus"] if self.focused else c["border"])
+        t, p = self.t, self.p
         x0 = self._thumb_x()
-        self.create_rectangle(x0, 0, x0 + self.thumb_w, h - 1,
-                              fill=c["thumb_hot"] if self.hot else c["thumb"], outline=c["border"])
+        # groove: 6 retro pixels high, centred, accent-filled up to the handle
+        gh = 6 * p
+        gy = (h - gh) // 2
+        draw_bevel(self, 0, gy, w, gy + gh, [(t[a], t[b]) for a, b in SUNKEN], t["field"], p)
+        if x0 > 2 * p:
+            self.create_rectangle(2 * p, gy + 2 * p, x0 + self.thumb_w // 2, gy + gh - 2 * p,
+                                  fill=t["accent"], outline="")
+        # handle: a raised button the full height of the slider
+        draw_bevel(self, x0, 0, x0 + self.thumb_w, h, [(t[a], t[b]) for a, b in RAISED],
+                   t["hot"] if self.hot else t["face"], p)
         cx = x0 + self.thumb_w // 2
-        top, bottom = int(round(h * 0.28)), h - 1 - int(round(h * 0.28))
-        gap = max(3, int(round(4 * self.k)))
-        for dx in (-gap, 0, gap):
-            self.create_line(cx + dx, top, cx + dx, bottom, fill=c["grip_dark"])
-            self.create_line(cx + dx + 1, top, cx + dx + 1, bottom, fill=c["grip_light"])
+        self.create_rectangle(cx - p // 2, h // 3, cx - p // 2 + p, h - h // 3, fill=t["shadow"], outline="")
+        if self.focused:
+            self.create_rectangle(0, 0, w - 1, h - 1, outline=t["text"], dash=(1, 1))
+
+
+class RetroHeader(tk.Canvas):
+    """The coloured title strip at the top of RTTS's windows: the pixel icon, a title, and on the main
+    window a Running / Stopped light."""
+
+    def __init__(self, master, title, show_state=False):
+        k = max(1.0, master.winfo_fpixels("1i") / 96.0)
+        self.p = pixel_scale(master)
+        super().__init__(master, height=int(round(30 * k)), highlightthickness=0, bd=0, takefocus=False)
+        self.title = title
+        self.show_state = show_state
+        self.running = False
+        self.t = THEMES[DEFAULT_THEME]
+        self.bind("<Configure>", lambda e: self.redraw())
+
+    def set_theme(self, t):
+        self.t = t
+        self.redraw()
+
+    def set_running(self, on):
+        if on != self.running:
+            self.running = on
+            self.redraw()
+
+    def redraw(self):
+        self.delete("all")
+        t, p = self.t, self.p
+        w = self.winfo_width()
+        if w <= 1:
+            w = int(float(self.cget("width")))
+        h = self.winfo_height()
+        if h <= 1:
+            h = int(float(self.cget("height")))
+        draw_gradient(self, 0, 0, w, h, t["accent_dark"], t["accent"])
+        iy = (h - 15 * p) // 2
+        draw_icon(self, 7 * p, iy, p)
+        tx = 7 * p + 16 * p + 6 * p
+        self.create_text(tx, h // 2, text=self.title, anchor="w", font=ui_font(10, True),
+                         fill=on_color(mix(t["accent_dark"], t["accent"], 0.25)))
+        if self.show_state:
+            label = "RUNNING" if self.running else "STOPPED"
+            pad = 6 * p
+            txt = self.create_text(w - pad - 4 * p, h // 2, text=label, anchor="e", font=ui_font(8, True),
+                                   fill=t["text"])
+            x0, y0, x1, y1 = self.bbox(txt)
+            led = 7 * p
+            cx0 = x0 - 4 * p - led - 5 * p                  # chip: [pad LED gap TEXT pad]
+            draw_bevel(self, cx0, y0 - 2 * p, w - pad, y1 + 2 * p, [(t[a], t[b]) for a, b in THIN_SUNKEN],
+                       t["face"], p)
+            ly = (y0 + y1) // 2 - led // 2
+            on = "#2EDC52" if self.running else t["shadow"]
+            self.create_rectangle(cx0 + 4 * p, ly, cx0 + 4 * p + led, ly + led, fill=on, outline=t["darkest"])
+            self.tag_raise(txt)
+
+
+class ThemeTile(tk.Canvas):
+    """A clickable preview of one colour scheme for Settings > Appearance: a tiny window in its colours."""
+
+    def __init__(self, master, key, command):
+        k = max(1.0, master.winfo_fpixels("1i") / 96.0)
+        self.p = pixel_scale(master)
+        super().__init__(master, width=int(round(112 * k)), height=int(round(64 * k)), highlightthickness=0,
+                         bd=0, takefocus=True, cursor="hand2")
+        self.key = key
+        self.command = command
+        self.selected = False
+        self.preview = THEMES.get(key, THEMES[DEFAULT_THEME])
+        self.window_t = THEMES[DEFAULT_THEME]           # the theme in use, for the area around the preview
+        self.focused = False
+        self.bind("<Button-1>", lambda e: self.command(self.key))
+        self.bind("<space>", lambda e: self.command(self.key))
+        self.bind("<Return>", lambda e: self.command(self.key))
+        self.bind("<FocusIn>", lambda e: self._focus(True))
+        self.bind("<FocusOut>", lambda e: self._focus(False))
+        self.bind("<Configure>", lambda e: self.redraw())
+
+    def _focus(self, on):
+        self.focused = on
+        self.redraw()
+
+    def update_look(self, window_t, preview_t, selected):
+        self.window_t, self.preview, self.selected = window_t, preview_t, selected
+        self.redraw()
+
+    def _mini(self, x0, y0, x1, y1, t):
+        p = self.p
+        draw_bevel(self, x0, y0, x1, y1, [(t[a], t[b]) for a, b in RAISED], t["face"], p)
+        tb0, tb1 = y0 + 2 * p + 1, y0 + 2 * p + 1 + 7 * p
+        draw_gradient(self, x0 + 2 * p + 1, tb0, x1 - 2 * p - 1, tb1, t["accent_dark"], t["accent"], 16)
+        fy = tb1 + 4 * p
+        draw_bevel(self, x0 + 5 * p, fy, x1 - 5 * p, fy + 7 * p, [(t[a], t[b]) for a, b in THIN_SUNKEN],
+                   t["field"], p)
+        self.create_rectangle(x0 + 8 * p, fy + 3 * p, x0 + 8 * p + (x1 - x0) // 3, fy + 4 * p,
+                              fill=t["text"] if t["dark"] else "#000000", outline="")
+        by = fy + 7 * p + 4 * p
+        if by + 6 * p < y1 - 3 * p:
+            draw_bevel(self, x0 + 5 * p, by, x0 + 5 * p + 16 * p, by + 6 * p,
+                       [(mix(t["accent"], "#FFFFFF", 0.4), t["darkest"])], t["accent"], p)
+            draw_bevel(self, x0 + 5 * p + 19 * p, by, x0 + 5 * p + 35 * p, by + 6 * p,
+                       [(t["light"], t["darkest"])], t["face"], p)
+
+    def redraw(self):
+        self.delete("all")
+        wt, p = self.window_t, self.p
+        self.configure(bg=wt["face"])
+        w = self.winfo_width()
+        if w <= 1:
+            w = int(float(self.cget("width")))
+        h = self.winfo_height()
+        if h <= 1:
+            h = int(float(self.cget("height")))
+        m = 4 * p
+        if self.key == "system":          # Match Windows: Classic and Midnight side by side
+            mid = w // 2
+            self._mini(m, m, w - m - (w // 3), h - m - 3 * p, THEMES["classic"])
+            self._mini(mid - 6 * p, m + 3 * p, w - m, h - m, THEMES["midnight"])
+        else:
+            self._mini(m, m, w - m, h - m, self.preview)
+        if self.selected:
+            for i in range(2 * p):
+                self.create_rectangle(i, i, w - 1 - i, h - 1 - i, outline=wt["heading"])
+        elif self.focused:
+            self.create_rectangle(1, 1, w - 2, h - 2, outline=wt["text"], dash=(1, 1))
+
+
+def ensure_retro_theme(root, st, key, t, images):
+    """Create the ttk theme "rtts-<key>" for colours t, once. `images` keeps its PhotoImages alive.
+
+    Built on "clam": buttons, text boxes, group boxes, check boxes, the status bar and progress bars get
+    pixel-exact bevel images; combo box arrows, scroll bars and tabs use clam's own parts in our colours."""
+    name = "rtts-" + key
+    if name in st.theme_names():
+        return name
+    p = pixel_scale(root)
+    b = 2 * p                                    # two bevel rings
+    n = 2 * b + 2
+
+    def rings(spec):
+        return [(t[a], t[c]) for a, c in spec]
+
+    acc_rings = [(mix(t["accent"], "#FFFFFF", 0.45), t["darkest"]), (mix(t["accent"], "#FFFFFF", 0.2), t["accent_dark"])]
+    acc_down = [(t["darkest"], mix(t["accent"], "#FFFFFF", 0.45)), (t["accent_dark"], mix(t["accent"], "#FFFFFF", 0.2))]
+    img = {
+        "btn": bevel_image(root, n, rings(RAISED), t["face"], p),
+        "btn_hot": bevel_image(root, n, rings(RAISED), t["hot"], p),
+        "btn_down": bevel_image(root, n, rings(SUNKEN), t["face"], p),
+        "acc": bevel_image(root, n, acc_rings, t["accent"], p),
+        "acc_hot": bevel_image(root, n, acc_rings, mix(t["accent"], "#FFFFFF", 0.12), p),
+        "acc_down": bevel_image(root, n, acc_down, t["accent"], p),
+        "acc_dis": bevel_image(root, n, rings(RAISED), t["face"], p),
+        "field": bevel_image(root, n, rings(SUNKEN), t["field"], p),
+        "field_dis": bevel_image(root, n, rings(SUNKEN), t["face"], p),
+        "group": bevel_image(root, n, rings(ETCHED), t["face"], p),
+        "status": bevel_image(root, 2 * p + 2, rings(THIN_SUNKEN), t["face"], p),
+        "chk_off": check_image(root, t, p, False, t["field"], t["text"] if t["dark"] else "#000000"),
+        "chk_on": check_image(root, t, p, True, t["field"], t["text"] if t["dark"] else "#000000"),
+        "chk_off_dis": check_image(root, t, p, False, t["face"], t["shadow"]),
+        "chk_on_dis": check_image(root, t, p, True, t["face"], t["shadow"]),
+        "chk_off_down": check_image(root, t, p, False, t["face"], t["text"]),
+        "chk_on_down": check_image(root, t, p, True, t["face"], t["text"] if t["dark"] else "#000000"),
+    }
+    # progress: blocks of the accent colour with gaps, repeated along the bar
+    blk = tk.PhotoImage(master=root, width=8 * p, height=1)
+    blk.put(t["accent"], to=(0, 0, 6 * p, 1))
+    blk.put(t["field"], to=(6 * p, 0, 8 * p, 1))
+    img["pbar"] = blk
+    images[name] = img
+
+    st.theme_create(name, parent="clam")
+    st.theme_use(name)
+    st.element_create("Retro.Button.border", "image", img["btn"], ("disabled", img["btn"]),
+                      ("pressed", img["btn_down"]), ("active", img["btn_hot"]), border=b, sticky="nsew")
+    st.element_create("Retro.Accent.border", "image", img["acc"], ("disabled", img["acc_dis"]),
+                      ("pressed", img["acc_down"]), ("active", img["acc_hot"]), border=b, sticky="nsew")
+    st.element_create("Retro.Field.border", "image", img["field"], ("disabled", img["field_dis"]),
+                      border=b, sticky="nsew")
+    st.element_create("Retro.Group.border", "image", img["group"], border=b, sticky="nsew")
+    st.element_create("Retro.Status.border", "image", img["status"], border=p, sticky="nsew")
+    st.element_create("Retro.Check.indicator", "image", img["chk_off"],
+                      ("disabled", "selected", img["chk_on_dis"]), ("disabled", img["chk_off_dis"]),
+                      ("pressed", "selected", img["chk_on_down"]), ("pressed", img["chk_off_down"]),
+                      ("selected", img["chk_on"]), sticky="")
+    st.element_create("Retro.Progress.trough", "image", img["field"], border=b, padding=b + p,
+                      height=int(round(18 * root.winfo_fpixels("1i") / 96.0)), sticky="nsew")
+    st.element_create("Retro.Progress.pbar", "image", img["pbar"], border=0, sticky="nsew")
+
+    def button(border):
+        return [(border, {"sticky": "nswe", "children": [
+            ("Button.focus", {"sticky": "nswe", "children": [
+                ("Button.padding", {"sticky": "nswe", "children": [("Button.label", {"sticky": "nswe"})]})]})]})]
+
+    st.layout("TButton", button("Retro.Button.border"))
+    st.layout("Accent.TButton", button("Retro.Accent.border"))
+    st.layout("TEntry", [("Retro.Field.border", {"sticky": "nswe", "children": [
+        ("Entry.padding", {"sticky": "nswe", "children": [("Entry.textarea", {"sticky": "nswe"})]})]})])
+    st.layout("TCombobox", [("Retro.Field.border", {"sticky": "nswe", "children": [
+        ("Combobox.downarrow", {"side": "right", "sticky": "ns"}),
+        ("Combobox.padding", {"expand": "1", "sticky": "nswe", "children": [
+            ("Combobox.textarea", {"sticky": "nswe"})]})]})])
+    st.layout("TLabelframe", [("Retro.Group.border", {"sticky": "nswe"})])
+    st.layout("Field.TFrame", [("Retro.Field.border", {"sticky": "nswe"})])
+    st.layout("Status.TLabel", [("Retro.Status.border", {"sticky": "nswe", "children": [
+        ("Label.padding", {"sticky": "nswe", "children": [("Label.label", {"sticky": "nswe"})]})]})])
+    st.layout("TCheckbutton", [("Checkbutton.padding", {"sticky": "nswe", "children": [
+        ("Retro.Check.indicator", {"side": "left", "sticky": ""}),
+        ("Checkbutton.focus", {"side": "left", "sticky": "w", "children": [
+            ("Checkbutton.label", {"sticky": "nswe"})]})]})])
+    st.layout("Horizontal.TProgressbar", [("Retro.Progress.trough", {"sticky": "nswe", "children": [
+        ("Retro.Progress.pbar", {"side": "left", "sticky": "ns"})]})])
+    return name
+
+
+def style_retro_theme(st, t):
+    """Colours and fonts for the theme in use (run after theme_use, every time the theme changes)."""
+    sel_bg = t["accent_dark"]
+    sel_fg = on_color(sel_bg)
+    disabled = mix(t["face"], t["text"], 0.45)
+    trough = mix(t["face"], t["field"], 0.5)
+    st.configure(".", background=t["face"], foreground=t["text"], fieldbackground=t["field"],
+                 bordercolor=t["darkest"], lightcolor=t["light"], darkcolor=t["shadow"], troughcolor=trough,
+                 focuscolor=t["text"], insertcolor=t["text"], selectbackground=sel_bg,
+                 selectforeground=sel_fg, font=ui_font())
+    st.map(".", foreground=[("disabled", disabled)])
+    st.configure("TFrame", background=t["face"])
+    st.configure("TLabel", background=t["face"], foreground=t["text"])
+    st.configure("TButton", foreground=t["text"], padding=(10, 3), font=ui_font(bold=True),
+                 focusthickness=1, focuscolor=t["text"], anchor="center")
+    st.map("TButton", foreground=[("disabled", disabled)])
+    st.configure("Accent.TButton", foreground=on_color(t["accent"]), padding=(10, 3), font=ui_font(bold=True),
+                 focusthickness=1, focuscolor=on_color(t["accent"]), anchor="center")
+    st.map("Accent.TButton", foreground=[("disabled", disabled)],
+           focuscolor=[("disabled", t["text"])])
+    st.configure("TEntry", foreground=t["text"], fieldbackground=t["field"], padding=(4, 2))
+    st.configure("TCombobox", foreground=t["text"], fieldbackground=t["field"], background=t["face"],
+                 arrowcolor=t["text"], bordercolor=t["darkest"], lightcolor=t["light"], darkcolor=t["shadow"],
+                 padding=(4, 1), arrowsize=13)
+    st.map("TCombobox", fieldbackground=[("readonly", t["field"])], foreground=[("readonly", t["text"])],
+           background=[("pressed", t["face"]), ("active", t["hot"])],
+           selectbackground=[("readonly", t["field"])], selectforeground=[("readonly", t["text"])],
+           arrowcolor=[("disabled", disabled)])
+    st.configure("TCheckbutton", background=t["face"], foreground=t["text"], focuscolor=t["text"], padding=(0, 1))
+    st.map("TCheckbutton", background=[("active", t["face"])])
+    st.configure("TRadiobutton", background=t["face"], foreground=t["text"], indicatorbackground=t["field"],
+                 indicatorforeground=t["text"], upperbordercolor=t["shadow"], lowerbordercolor=t["light"])
+    st.map("TRadiobutton", background=[("active", t["face"])],
+           indicatorbackground=[("pressed", t["face"]), ("selected", t["field"])])
+    st.configure("TLabelframe", background=t["face"], padding=(10, 6), labelmargins=(8, 0, 8, 0))
+    st.configure("TLabelframe.Label", background=t["face"], foreground=t["heading"], font=ui_font(bold=True),
+                 padding=(3, 0))
+    st.configure("Status.TLabel", background=t["face"], foreground=t["text"], padding=(6, 2))
+    st.configure("Vertical.TScrollbar", background=t["face"], troughcolor=trough, bordercolor=t["darkest"],
+                 lightcolor=t["light"], darkcolor=t["shadow"], arrowcolor=t["text"], gripcount=0, arrowsize=15)
+    st.map("Vertical.TScrollbar", background=[("pressed", t["face"]), ("active", t["hot"])])
+    st.configure("TSeparator", background=t["shadow"])
+    st.configure("TNotebook", background=t["face"], bordercolor=t["darkest"], lightcolor=t["light"],
+                 darkcolor=t["shadow"], tabmargins=(2, 4, 2, 0))
+    st.configure("TNotebook.Tab", background=mix(t["face"], t["shadow"], 0.3), foreground=t["text"],
+                 bordercolor=t["darkest"], lightcolor=t["light"], darkcolor=t["shadow"], padding=(12, 3),
+                 font=ui_font(bold=True))
+    st.map("TNotebook.Tab", background=[("selected", t["face"]), ("active", t["hot"])],
+           lightcolor=[("selected", t["light"])], expand=[("selected", (2, 2, 2, 0))])
+    st.configure("Hint.TLabel", foreground=t["hint"])
+    st.configure("Warn.TLabel", foreground=t["warn"])
+    st.configure("Good.TLabel", foreground=t["good"])
+    st.configure("Bad.TLabel", foreground=t["bad"])
+    st.configure("Title.TLabel", font=ui_font(11, True))
+    st.configure("Bold.TLabel", font=ui_font(bold=True))
+    for name in ("Good", "Warn", "Bad"):
+        st.configure("%sBold.TLabel" % name, font=ui_font(bold=True), foreground=t[name.lower()])
 
 
 # --------------------------------------------------------------------------
@@ -1810,8 +2294,17 @@ class App:
         self.recent = []
 
         self.settings_win = None
-        self.light_bg = root.cget("bg")
-        self.native_theme = ttk.Style(root).theme_use()
+        self.theme = THEMES[DEFAULT_THEME]   # the colours in use (see apply_theme)
+        self.theme_images = {}             # ttk theme name -> its bevel images (kept alive here)
+        self.headers = []                  # title strips to recolour when the theme changes
+        self.tiles = {}                    # Settings > Appearance: theme key -> ThemeTile
+        # text boxes and drop-down menus take Tk's default fonts, so those become the RTTS font too
+        for name in ("TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont", "TkTooltipFont",
+                     "TkCaptionFont", "TkSmallCaptionFont", "TkIconFont"):
+            try:
+                tkfont.nametofont(name, root=root).configure(family=UI_FAMILY, size=FONT_SIZE)
+            except Exception:
+                pass
         self.apply_icon(root)
         self.build_ui()
         self.load_settings()
@@ -1844,10 +2337,8 @@ class App:
     # ---------------- UI ----------------
     def build_ui(self):
         r = self.root
-        try:
-            ttk.Style().configure(".", font=FONT)
-        except Exception:
-            pass
+        r.option_add("*TCombobox*Listbox.font", ui_font())
+        r.columnconfigure(0, weight=1)
 
         self.v_voice = tk.StringVar()
         self.v_model = tk.StringVar()
@@ -1863,7 +2354,9 @@ class App:
         self.v_auto = tk.BooleanVar(value=False)
         self.v_stats = tk.BooleanVar(value=False)
         self.stats_sent = set()          # (model, voice) already reported this launch
-        self.v_theme = tk.StringVar(value="light")
+        self.v_theme = tk.StringVar(value=DEFAULT_THEME)
+        self.v_custom_accent = tk.StringVar(value=DEFAULTS["custom_accent"])
+        self.v_custom_base = tk.StringVar(value=DEFAULTS["custom_base"])
         self.v_top = tk.BooleanVar(value=False)
         self.v_test = tk.StringVar(value="Hello, this is a test.")
         self.v_status = tk.StringVar(value="Starting...")
@@ -1872,8 +2365,12 @@ class App:
         self.v_speed_txt = tk.StringVar(value="100%")
         self.v_vol_txt = tk.StringVar(value="100")
 
+        self.header = RetroHeader(r, "RTTS.exe", show_state=True)
+        self.header.grid(row=0, column=0, sticky="ew")
+        self.headers.append(self.header)
+
         outer = ttk.Frame(r, padding=(12, 8, 12, 0))
-        outer.grid(row=0, column=0)
+        outer.grid(row=1, column=0)
 
         # Voice group
         g1 = ttk.LabelFrame(outer, text="Voice", padding=(10, 6))
@@ -1940,14 +2437,15 @@ class App:
         # Recent messages
         g5 = ttk.LabelFrame(outer, text="Recent Messages", padding=(10, 6))
         g5.grid(row=4, column=0, sticky="ew", pady=(0, 6))
-        self.txt_log = tk.Text(g5, height=4, width=50, wrap="word", state="disabled",
-                               font=("Segoe UI", 9), relief="solid", borderwidth=1)
-        sb = ttk.Scrollbar(g5, orient="vertical", command=self.txt_log.yview)
+        g5.columnconfigure(0, weight=1)
+        box = ttk.Frame(g5, style="Field.TFrame", padding=2 * pixel_scale(r))   # sunken box: text + scroll bar
+        box.grid(row=0, column=0, sticky="ew")
+        box.columnconfigure(0, weight=1)
+        self.txt_log = tk.Text(box, height=4, width=46, wrap="word", state="disabled", font=ui_font(),
+                               relief="flat", borderwidth=0, highlightthickness=0, padx=4, pady=2)
+        sb = ttk.Scrollbar(box, orient="vertical", command=self.txt_log.yview)
         self.txt_log.configure(yscrollcommand=sb.set)
-        self.txt_light = {k: self.txt_log.cget(k) for k in ("bg", "fg", "insertbackground",
-                                                            "selectbackground", "selectforeground",
-                                                            "highlightbackground", "highlightcolor")}
-        self.txt_log.grid(row=0, column=0, sticky="ew")
+        self.txt_log.grid(row=0, column=0, sticky="nsew")
         sb.grid(row=0, column=1, sticky="ns")
 
         # Buttons
@@ -1955,7 +2453,7 @@ class App:
         bb.grid(row=5, column=0, sticky="ew", pady=(0, 8))
         for c in range(5):
             bb.columnconfigure(c, weight=1)
-        self.btn_start = ttk.Button(bb, command=self.start_app)
+        self.btn_start = ttk.Button(bb, command=self.start_app, style="Accent.TButton")
         self.btn_start.grid(row=0, column=0, sticky="ew", padx=(0, 4))
         self.btn_stop = ttk.Button(bb, command=self.stop_app)
         self.btn_stop.grid(row=0, column=1, sticky="ew", padx=4)
@@ -1967,15 +2465,17 @@ class App:
         # Download progress: at the bottom, just above the status bar. Percentage and speed on the left.
         # Only shown while a voice file is downloading (show_progress_row); the window shrinks back after.
         pf = self.pf = ttk.Frame(r, padding=(12, 0, 12, 6))
-        pf.grid(row=1, column=0, sticky="ew")
+        pf.grid(row=2, column=0, sticky="ew")
         pf.columnconfigure(1, weight=1)
         ttk.Label(pf, textvariable=self.v_pct, width=19).grid(row=0, column=0, sticky="w")
         self.pb = ttk.Progressbar(pf, orient="horizontal", mode="determinate", maximum=100)
         self.pb.grid(row=0, column=1, sticky="ew")
         pf.grid_remove()
 
-        status = ttk.Label(r, textvariable=self.v_status, relief="sunken", anchor="w", padding=(6, 2))
-        status.grid(row=2, column=0, sticky="ew")
+        sf = ttk.Frame(r, padding=(4, 0, 4, 4))
+        sf.grid(row=3, column=0, sticky="ew")
+        sf.columnconfigure(0, weight=1)
+        ttk.Label(sf, textvariable=self.v_status, style="Status.TLabel", anchor="w").grid(row=0, column=0, sticky="ew")
 
         self.cb_voice.bind("<<ComboboxSelected>>", self.on_voice_change)
         self.cb_model.bind("<<ComboboxSelected>>", self.on_model_change)
@@ -1994,104 +2494,53 @@ class App:
             except Exception:
                 log_error(traceback.format_exc())
 
-    def resolved_theme(self):
-        t = self.v_theme.get()
-        if t == "system":
-            return "dark" if system_uses_dark() else "light"
-        return "dark" if t == "dark" else "light"
+    def current_theme(self):
+        """(colours, key) of the chosen theme. "system" follows Windows; "custom" is built from the picked colour."""
+        key = self.v_theme.get()
+        if key == "system":
+            key = "midnight" if system_uses_dark() else "classic"
+        if key == "custom":
+            accent = self.v_custom_accent.get()
+            accent = accent.upper() if HEX_COLOR.match(accent) else DEFAULTS["custom_accent"]
+            base = "dark" if self.v_custom_base.get() == "dark" else "light"
+            return custom_theme(accent, base), "custom-%s-%s" % (accent[1:].lower(), base)
+        if key not in THEMES:
+            key = DEFAULT_THEME
+        return THEMES[key], key
 
     def apply_theme(self):
-        mode = self.resolved_theme()
-        dark = mode == "dark"
+        t, key = self.current_theme()
+        self.theme = t
         st = ttk.Style(self.root)
         try:
-            st.theme_use("clam" if dark else self.native_theme)
-            st.configure(".", font=FONT)
-            if dark:
-                self._style_dark(st)
-            st.configure("Warn.TLabel", foreground="#f0b050" if dark else "#a85a00")
-            st.configure("Hint.TLabel", foreground="#a0a0a0" if dark else "#555555")
-            st.configure("Good.TLabel", foreground="#6fcf7f" if dark else "#1e7b34")
-            st.configure("Bad.TLabel", foreground="#ff7b72" if dark else "#b3261e")
-            st.configure("Title.TLabel", font=("Segoe UI", 11, "bold"))
-            st.configure("Bold.TLabel", font=("Segoe UI", 9, "bold"))
-            for name in ("Good", "Warn", "Bad"):
-                st.configure("%sBold.TLabel" % name, font=("Segoe UI", 9, "bold"),
-                             foreground=st.lookup("%s.TLabel" % name, "foreground"))
+            name = ensure_retro_theme(self.root, st, key, t, self.theme_images)
+            st.theme_use(name)
+            style_retro_theme(st, t)
         except Exception:
             log_error(traceback.format_exc())
-        c = DARK if dark else None
-        bg = c["bg"] if c else self.light_bg
-        self.root.configure(bg=bg)
+        self.root.configure(bg=t["face"])
         for s in self.sliders:
-            s.set_bg(bg, dark)
-        if self.settings_win is not None and self.settings_win.winfo_exists():
-            self.settings_win.configure(bg=bg)
-        tl = self.txt_light
-        self.txt_log.configure(
-            bg=c["field"] if c else tl["bg"], fg=c["fg"] if c else tl["fg"],
-            insertbackground=c["fg"] if c else tl["insertbackground"],
-            selectbackground=c["accent"] if c else tl["selectbackground"],
-            selectforeground="#ffffff" if c else tl["selectforeground"],
-            highlightbackground=c["border"] if c else tl["highlightbackground"],
-            highlightcolor=c["accent"] if c else tl["highlightcolor"])
-        # drop-down list of the comboboxes is a plain Tk listbox
+            s.set_theme(t)
+        self.headers = [h for h in self.headers if h.winfo_exists()]
+        for h in self.headers:
+            h.set_theme(t)
+        self.txt_log.configure(bg=t["field"], fg=t["text"], insertbackground=t["text"],
+                               selectbackground=t["accent_dark"], selectforeground=on_color(t["accent_dark"]),
+                               inactiveselectbackground=t["accent_dark"])
+        # the drop-down list of the comboboxes is a plain Tk listbox
         for cb in (self.cb_voice, self.cb_model, self.cb_out):
             try:
                 lb = "%s.f.l" % self.root.tk.call("ttk::combobox::PopdownWindow", cb)
-                self.root.tk.call(lb, "configure",
-                                  "-background", c["field"] if c else "white",
-                                  "-foreground", c["fg"] if c else "black",
-                                  "-selectbackground", c["accent"] if c else "#0078d7",
-                                  "-selectforeground", "#ffffff")
+                self.root.tk.call(lb, "configure", "-background", t["field"], "-foreground", t["text"],
+                                  "-selectbackground", t["accent_dark"],
+                                  "-selectforeground", on_color(t["accent_dark"]), "-font", ui_font())
             except Exception:
                 pass
-        set_titlebar_dark(self.root, dark)
+        set_titlebar_dark(self.root, t["dark"])
         if self.settings_win is not None and self.settings_win.winfo_exists():
-            set_titlebar_dark(self.settings_win, dark)
-
-    def _style_dark(self, st):
-        c = DARK
-        st.configure(".", background=c["bg"], foreground=c["fg"], fieldbackground=c["field"],
-                     bordercolor=c["border"], darkcolor=c["bg"], lightcolor=c["bg"],
-                     troughcolor=c["trough"], focuscolor=c["accent"], insertcolor=c["fg"],
-                     selectbackground=c["accent"], selectforeground="#ffffff")
-        st.map(".", foreground=[("disabled", c["disabled"])])
-        st.configure("TLabelframe", background=c["bg"], bordercolor=c["border"],
-                     darkcolor=c["bg"], lightcolor=c["bg"])
-        st.configure("TLabelframe.Label", background=c["bg"], foreground=c["fg"])
-        st.configure("TButton", background=c["button"], bordercolor=c["border"],
-                     darkcolor=c["button"], lightcolor=c["button"], padding=(6, 3))
-        st.map("TButton", background=[("pressed", c["accent"]), ("active", c["button_hot"])],
-               foreground=[("disabled", c["disabled"])])
-        for name in ("TCheckbutton", "TRadiobutton"):
-            st.configure(name, background=c["bg"], indicatorbackground=c["field"],
-                         indicatorforeground=c["fg"], upperbordercolor=c["border"],
-                         lowerbordercolor=c["border"])
-            st.map(name, background=[("active", c["bg"])],
-                   indicatorbackground=[("selected", c["accent"]), ("active", c["button_hot"])])
-        st.configure("TEntry", fieldbackground=c["field"], foreground=c["fg"],
-                     bordercolor=c["border"], darkcolor=c["field"], lightcolor=c["field"])
-        st.configure("TCombobox", fieldbackground=c["field"], background=c["button"],
-                     foreground=c["fg"], arrowcolor=c["fg"], bordercolor=c["border"],
-                     darkcolor=c["field"], lightcolor=c["field"],
-                     selectbackground=c["field"], selectforeground=c["fg"])
-        st.map("TCombobox", fieldbackground=[("readonly", c["field"])],
-               foreground=[("readonly", c["fg"])], background=[("active", c["button_hot"])],
-               selectbackground=[("readonly", c["field"])],
-               selectforeground=[("readonly", c["fg"])])
-        st.configure("Vertical.TScrollbar", background=c["button"], troughcolor=c["trough"],
-                     bordercolor=c["border"], arrowcolor=c["fg"],
-                     darkcolor=c["button"], lightcolor=c["button"])
-        st.map("Vertical.TScrollbar", background=[("active", c["button_hot"])])
-        st.configure("Horizontal.TProgressbar", background=c["accent"], troughcolor=c["trough"],
-                     bordercolor=c["border"], darkcolor=c["accent"], lightcolor=c["accent"])
-        st.configure("TNotebook", background=c["bg"], bordercolor=c["border"],
-                     darkcolor=c["bg"], lightcolor=c["bg"])
-        st.configure("TNotebook.Tab", background=c["button"], foreground=c["fg"], bordercolor=c["border"],
-                     darkcolor=c["button"], lightcolor=c["button"], padding=(10, 3))
-        st.map("TNotebook.Tab", background=[("selected", c["bg"]), ("active", c["button_hot"])],
-               lightcolor=[("selected", c["bg"])])
+            self.settings_win.configure(bg=t["face"])
+            set_titlebar_dark(self.settings_win, t["dark"])
+            self.update_tiles()
 
     def open_settings(self):
         if self.settings_win is not None and self.settings_win.winfo_exists():
@@ -2106,22 +2555,22 @@ class App:
         self.apply_icon(w)
         w.protocol("WM_DELETE_WINDOW", self.close_settings)
 
+        w.columnconfigure(0, weight=1)
+        header = RetroHeader(w, "Settings")
+        header.grid(row=0, column=0, sticky="ew")
+        self.headers.append(header)
         outer = ttk.Frame(w, padding=(12, 8, 12, 8))
-        outer.grid(row=0, column=0)
+        outer.grid(row=1, column=0)
         nb = ttk.Notebook(outer)
         nb.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         general = ttk.Frame(nb, padding=(8, 8, 8, 2))
+        appearance = ttk.Frame(nb, padding=(8, 8, 8, 2))
         keybinds = ttk.Frame(nb, padding=(8, 8, 8, 2))
         nb.add(general, text="General")
+        nb.add(appearance, text="Appearance")
         nb.add(keybinds, text="Keybinds")
+        self.build_appearance_tab(appearance)
         self.build_keybinds_tab(keybinds)
-
-        g1 = ttk.LabelFrame(general, text="Appearance", padding=(10, 6))
-        g1.grid(row=0, column=0, sticky="ew", pady=(0, 6))
-        ttk.Label(g1, text="Theme:").grid(row=0, column=0, sticky="w", pady=2)
-        for i, (label, value) in enumerate(THEME_CHOICES):
-            ttk.Radiobutton(g1, text=label, value=value, variable=self.v_theme,
-                            command=self.on_theme_change).grid(row=0, column=i + 1, padx=(10, 0), pady=2)
 
         g2 = ttk.LabelFrame(general, text="Window", padding=(10, 6))
         g2.grid(row=1, column=0, sticky="ew", pady=(0, 6))
@@ -2166,6 +2615,82 @@ class App:
         w.geometry("+%d+%d" % (self.root.winfo_x() + 40, self.root.winfo_y() + 40))
         self.apply_theme()
         w.focus_force()
+
+    def build_appearance_tab(self, tab):
+        tab.columnconfigure(0, weight=1)
+        g = ttk.LabelFrame(tab, text="Theme", padding=(10, 6))
+        g.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        self.tiles = {}
+        self.tile_labels = {}
+        for i, key in enumerate(THEME_TILES):
+            cell = ttk.Frame(g)
+            cell.grid(row=i // 3, column=i % 3, padx=4, pady=(2, 6))
+            tile = self.tiles[key] = ThemeTile(cell, key, self.pick_theme)
+            tile.grid(row=0, column=0)
+            lbl = self.tile_labels[key] = ttk.Label(cell, text=self.theme_name(key), cursor="hand2")
+            lbl.grid(row=1, column=0, pady=(2, 0))
+            lbl.bind("<Button-1>", lambda e, k=key: self.pick_theme(k))
+
+        g2 = ttk.LabelFrame(tab, text="Custom theme", padding=(10, 6))
+        g2.grid(row=1, column=0, sticky="ew", pady=(0, 6))
+        k = max(1.0, self.root.winfo_fpixels("1i") / 96.0)
+        ttk.Label(g2, text="Colour:").grid(row=0, column=0, sticky="w")
+        self.swatch = tk.Canvas(g2, width=int(round(40 * k)), height=int(round(22 * k)), highlightthickness=0,
+                                bd=0, cursor="hand2")
+        self.swatch.grid(row=0, column=1, padx=(8, 8))
+        self.swatch.bind("<Button-1>", lambda e: self.pick_custom_color())
+        ttk.Button(g2, text="Pick colour...", command=self.pick_custom_color).grid(row=0, column=2, sticky="w")
+        ttk.Label(g2, text="Base:").grid(row=0, column=3, sticky="w", padx=(14, 0))
+        self.cb_base = ttk.Combobox(g2, values=("Light", "Dark"), state="readonly", width=6)
+        self.cb_base.set("Dark" if self.v_custom_base.get() == "dark" else "Light")
+        self.cb_base.bind("<<ComboboxSelected>>", lambda e: self.set_custom_base(self.cb_base.get()))
+        self.cb_base.grid(row=0, column=4, sticky="w", padx=(8, 0))
+        ttk.Label(g2, style="Hint.TLabel", wraplength=400, justify="left",
+                  text="Pick any colour for the title strip, the Start button and the sliders. Base sets the "
+                       "window colours: light grey or dark.").grid(row=1, column=0, columnspan=5, sticky="w",
+                                                                   pady=(6, 0))
+        self.update_tiles()
+
+    @staticmethod
+    def theme_name(key):
+        return {"system": "Match Windows", "custom": "Custom"}.get(key) or THEMES[key]["name"]
+
+    def update_tiles(self):
+        """Redraw Settings > Appearance: the tiles in the colours in use, the chosen one marked, the swatch."""
+        if not self.tiles:
+            return
+        try:
+            chosen = self.v_theme.get()
+            accent = self.v_custom_accent.get()
+            custom = custom_theme(accent if HEX_COLOR.match(accent) else DEFAULTS["custom_accent"],
+                                  self.v_custom_base.get())
+            for key, tile in self.tiles.items():
+                preview = custom if key == "custom" else THEMES.get(key, THEMES["classic"])
+                tile.update_look(self.theme, preview, key == chosen)
+                self.tile_labels[key].configure(style="Bold.TLabel" if key == chosen else "TLabel")
+            self.cb_base.set("Dark" if self.v_custom_base.get() == "dark" else "Light")
+            sw = self.swatch
+            sw.delete("all")
+            sw.configure(bg=self.theme["face"])
+            draw_bevel(sw, 0, 0, int(sw.cget("width")), int(sw.cget("height")),
+                       [(self.theme[a], self.theme[b]) for a, b in SUNKEN], custom["accent"], pixel_scale(sw))
+        except tk.TclError:                # the Settings window is closing
+            pass
+
+    def pick_theme(self, key):
+        self.v_theme.set(key)
+        self.on_theme_change()
+
+    def pick_custom_color(self):
+        res = colorchooser.askcolor(color=self.v_custom_accent.get(), title="%s - Custom colour" % APP_TITLE,
+                                    parent=self.settings_win or self.root)
+        if res and res[1] and HEX_COLOR.match(res[1]):
+            self.v_custom_accent.set(res[1].upper())
+            self.pick_theme("custom")
+
+    def set_custom_base(self, label):
+        self.v_custom_base.set("dark" if label == "Dark" else "light")
+        self.pick_theme("custom")
 
     def build_keybinds_tab(self, tab):
         g = ttk.LabelFrame(tab, text="Start / Stop", padding=(10, 6))
@@ -2256,6 +2781,7 @@ class App:
             except Exception:
                 pass
         self.settings_win = None
+        self.tiles = {}
 
     def confirm_large_model(self, entry):
         """The "are you sure" popup before a large (1B+) model's first download, with a check of this PC.
@@ -2264,7 +2790,7 @@ class App:
         disk space does, because the download couldn't finish."""
         checks, download, can = large_model_check(entry)
         warned = any(c.level == "warn" for c in checks)
-        dark = self.resolved_theme() == "dark"
+        dark = self.theme["dark"]
         parent = self.root
         win = tk.Toplevel(parent)
         win.withdraw()
@@ -2272,7 +2798,11 @@ class App:
         win.resizable(False, False)
         win.transient(parent)
         self.apply_icon(win)
-        win.configure(bg=DARK["bg"] if dark else self.light_bg)
+        win.configure(bg=self.theme["face"])
+        win.columnconfigure(0, weight=1)
+        header = RetroHeader(win, "Large model")
+        header.set_theme(self.theme)
+        header.grid(row=0, column=0, sticky="ew")
         answer = []
 
         def finish(ok):
@@ -2280,7 +2810,7 @@ class App:
             win.destroy()
 
         f = ttk.Frame(win, padding=(18, 14, 18, 14))
-        f.grid(row=0, column=0, sticky="nsew")
+        f.grid(row=1, column=0, sticky="nsew")
         f.columnconfigure(1, weight=1)
         ttk.Label(f, text="%s  %s is a large model (%s)" % (LARGE_MARK, entry["name"], entry["params"]),
                   style="Title.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
@@ -2376,6 +2906,8 @@ class App:
         except Exception:
             pass
         data["theme"] = self.v_theme.get()
+        data["custom_accent"] = self.v_custom_accent.get()
+        data["custom_base"] = self.v_custom_base.get()
         data["topmost"] = bool(self.v_top.get())
         data["slash_typed"] = bool(self.v_slash.get())
         data["skip_emojis"] = bool(self.v_emoji.get())
@@ -2636,8 +3168,11 @@ class App:
         self.v_emoji.set(bool(d.get("skip_emojis", False)))
         self.v_auto.set(bool(d.get("auto_update", False)))
         self.v_stats.set(bool(d.get("voice_stats", False)))
-        theme = d.get("theme")
-        self.v_theme.set(theme if theme in ("light", "dark", "system") else "light")
+        theme = LEGACY_THEMES.get(d.get("theme"), d.get("theme"))
+        self.v_theme.set(theme if theme in THEME_TILES else DEFAULT_THEME)
+        accent = str(d.get("custom_accent") or "")
+        self.v_custom_accent.set(accent.upper() if HEX_COLOR.match(accent) else DEFAULTS["custom_accent"])
+        self.v_custom_base.set("dark" if d.get("custom_base") == "dark" else "light")
         self.v_top.set(bool(d.get("topmost", False)))
         self.apply_theme()
         self.apply_topmost()
@@ -2680,6 +3215,8 @@ class App:
             "auto_update": bool(self.v_auto.get()),
             "voice_stats": bool(self.v_stats.get()),
             "theme": self.v_theme.get(),
+            "custom_accent": self.v_custom_accent.get(),
+            "custom_base": self.v_custom_base.get(),
             "topmost": bool(self.v_top.get()),
             "start_key": self.hotkeys["start"].name,
             "stop_key": self.hotkeys["stop"].name,
@@ -2697,6 +3234,8 @@ class App:
         d = dict(DEFAULTS)
         d["model"] = keep_model          # don't trigger a re-download/reload on reset
         d["theme"] = self.v_theme.get()  # looks are chosen in Settings, not reset here
+        d["custom_accent"] = self.v_custom_accent.get()
+        d["custom_base"] = self.v_custom_base.get()
         d["topmost"] = bool(self.v_top.get())
         d["auto_update"] = bool(self.v_auto.get())
         d["voice_stats"] = bool(self.v_stats.get())   # a privacy choice, so Reset doesn't change it
@@ -3050,6 +3589,7 @@ class App:
         if not self.apply_chat_key():
             return
         self.running = True
+        self.header.set_running(True)
         self.report_voice()
         if self.engine is None and not self.engine_ready.is_set():
             self.set_status("Running - voice engine is still loading, messages will be spoken once it's ready")
@@ -3068,6 +3608,7 @@ class App:
 
     def stop_app(self):
         self.running = False
+        self.header.set_running(False)
         self.cancel_capture()
         self.cancel_speech()
         self.set_status(self.ready_text() if self.engine_ready.is_set() else "Stopped")
@@ -3336,10 +3877,16 @@ class App:
         win.title("Updating %s" % APP_TITLE)
         win.resizable(False, False)
         win.transient(self.root)
-        win.configure(bg=self.root.cget("bg"))
+        win.configure(bg=self.theme["face"])
         self.apply_icon(win)
+        win.columnconfigure(0, weight=1)
+        header = RetroHeader(win, "Updating RTTS")
+        header.set_theme(self.theme)
+        header.grid(row=0, column=0, sticky="ew")
+        self.headers.append(header)        # Settings can stay open meanwhile, so follow theme changes
         f = ttk.Frame(win, padding=(14, 12))
-        f.grid(row=0, column=0)
+        f.grid(row=1, column=0)
+        set_titlebar_dark(win, self.theme["dark"])
         v_text = tk.StringVar(value="Downloading RTTS %s ..." % rel["version"])
         ttk.Label(f, textvariable=v_text, width=46).grid(row=0, column=0, sticky="w")
         pb = ttk.Progressbar(f, length=320, maximum=100)
@@ -3424,12 +3971,19 @@ class App:
 
 
 def main():
+    global UI_FAMILY
     if IS_WIN:
         try:
             ctypes.windll.shcore.SetProcessDpiAwareness(1)
         except Exception:
             pass
+    load_bundled_fonts()
     root = tk.Tk()
+    try:
+        if UI_FAMILY not in tkfont.families(root):
+            UI_FAMILY = "Consolas"      # the bundled font is missing; Consolas comes with Windows
+    except Exception:
+        log_error(traceback.format_exc())
     try:
         App(root)
     except Exception:

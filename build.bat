@@ -24,6 +24,10 @@ if not exist "icon.ico" (
     echo [ERROR] icon.ico is missing from this folder.
     goto error
 )
+if not exist "assets\fonts\SpaceMono-Regular.ttf" (
+    echo [ERROR] assets\fonts is missing from this folder.
+    goto error
+)
 %PY% -c "import numpy, sounddevice, pynput, kokoro_onnx, tkinter" >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] RTTS's libraries are not installed. Run installer.bat first.
@@ -48,7 +52,7 @@ for %%m in (kokoro_onnx espeakng_loader phonemizer onnxruntime language_tags col
 :: 5. Build
 echo.
 echo [-] Building. This takes a few minutes...
-%PY% -m PyInstaller --noconfirm --clean --onedir --windowed --name RTTS --icon "icon.ico" --add-data "icon.ico;." --hidden-import pynput.keyboard._win32 --hidden-import pynput.mouse._win32 !COLLECT! RTTS.py
+%PY% -m PyInstaller --noconfirm --clean --onedir --windowed --name RTTS --icon "icon.ico" --add-data "icon.ico;." --add-data "assets\fonts;assets\fonts" --hidden-import pynput.keyboard._win32 --hidden-import pynput.mouse._win32 !COLLECT! RTTS.py
 if errorlevel 1 (
     echo [ERROR] The build failed. Scroll up to see why.
     goto error
