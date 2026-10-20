@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1
+
+- The GitHub account moved from CepsiPola to **RobloxTTS**. RTTS now checks **github.com/RobloxTTS/RTTS** for updates. That is the only official download page.
+
 ## 1.1.0
 
 **New look**

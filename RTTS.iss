@@ -1,6 +1,6 @@
 ﻿; Inno Setup script for RTTS. Build it with make_installer.bat (after build.bat).
 ; Change the version here when you release a new one.
-#define AppVer "1.1.0"
+#define AppVer "1.1.1"
 
 [Setup]
 AppId={{8F3A5C2E-6B1D-4E7A-9C40-2D5E7A1B3F68}

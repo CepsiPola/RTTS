@@ -47,7 +47,7 @@ Most text-to-speech tools send your text to a server, wait for the audio and dow
 
 ## Only download RTTS from here
 
-The **only** official download is the [Releases](../../releases/latest) page of this GitHub repo: **github.com/CepsiPola/RTTS**. RTTS is never uploaded anywhere else.
+The **only** official download is the [Releases](../../releases/latest) page of this GitHub repo: **github.com/RobloxTTS/RTTS**. RTTS is never uploaded anywhere else.
 
 Roblox tools are often re-uploaded with malware added, so **don't download RTTS from**:
 

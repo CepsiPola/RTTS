@@ -48,9 +48,9 @@ from tkinter import colorchooser, messagebox, ttk
 from tkinter import font as tkfont
 
 APP_TITLE = "RTTS"
-APP_VERSION = "1.1.0"      # keep the same as AppVer in RTTS.iss
+APP_VERSION = "1.1.1"      # keep the same as AppVer in RTTS.iss
 USER_AGENT = "RTTS/" + APP_VERSION
-GITHUB_REPO = "CepsiPola/RTTS"
+GITHUB_REPO = "RobloxTTS/RTTS"
 REPO_URL = "https://github.com/" + GITHUB_REPO
 RELEASES_URL = REPO_URL + "/releases/latest"
 LATEST_RELEASE_API = "https://api.github.com/repos/%s/releases/latest" % GITHUB_REPO
