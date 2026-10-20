@@ -8,9 +8,7 @@
 > [!WARNING]
 > **This GitHub page is the only official place to download RTTS.** Copies anywhere else may contain malware. [Read more](#only-download-rtts-from-here)
 
-<!-- DEMO: add an image or GIF as docs/images/demo.png, then delete this line and the closing line below
-<p align="center"><img src="docs/images/demo.png" alt="RTTS in action" width="720"></p>
--->
+<p align="center"><img src="docs/images/demo.gif" alt="RTTS in action" width="720"></p>
 
 ---
 
