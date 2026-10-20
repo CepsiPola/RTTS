@@ -27,7 +27,7 @@ It plays the voice through a virtual microphone ([VB-Cable](https://vb-audio.com
 
 ## AI use
 
-**The code.** RTTS was made using AI, and AI was heavily used to write the code. The full source is right here if you want to see how it works.
+**The code.** RTTS was made using AI, and AI was heavily used to write the code, mostly with [Claude](https://claude.com/claude-code) by Anthropic. The full source is right here if you want to see how it works.
 
 **The voices.** RTTS uses AI voice models to do the talking. Kokoro, Piper and Orpheus are AI models, while eSpeak is a classic robotic voice that isn't AI.
 
