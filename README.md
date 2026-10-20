@@ -2,13 +2,11 @@
 <p align="center"><b>Roblox Text-to-Speech</b><br>Type in Roblox chat. Be heard in voice chat.</p>
 
 <p align="center">
-  <a href="../../releases/latest"><b>Download for Windows</b></a>
+  <a href="../../releases/latest"><b>Download for Windows</b></a> · <a href="docs/images/demo.gif">Watch the video guide</a>
 </p>
 
 > [!WARNING]
 > **This GitHub page is the only official place to download RTTS.** Copies anywhere else may contain malware. [Read more](#only-download-rtts-from-here)
-
-<p align="center"><img src="docs/images/demo.gif" alt="RTTS in action" width="720"></p>
 
 ---
 
@@ -22,6 +20,19 @@
 - **Stays up to date:** checks for a new version every time it starts.
 
 <p align="center"><img src="docs/images/screenshot.png" alt="The RTTS window" width="460"></p>
+
+## Why local?
+
+Most text-to-speech tools send your text to a server, wait for the audio and download it. RTTS makes every voice on your own PC instead. That's better in a few ways:
+
+- **Less delay.** Nothing travels across the internet, so you don't wait on a server or your connection. When you press Enter, your PC starts talking right away. Bad Wi-Fi or a busy server never slows it down.
+- **Privacy.** Your messages never leave your PC. No company gets a copy of what you type, so nothing can be logged, read, sold or leaked (see [Privacy](#privacy)).
+- **Security.** There's no account to hack, no password to steal and no API key to leak. RTTS never asks you to log in to anything.
+- **Free forever.** Online voices often charge per message or limit how much you can say. Local voices cost nothing to run, so you can talk as much as you like.
+- **Works without internet.** Once a voice is downloaded, it keeps working even if you go offline. RTTS only needs the internet to download voices and check for updates.
+- **Nothing can be taken away.** If an online service shuts down, changes its price or removes a voice, apps that use it stop working. Voices on your PC stay yours.
+
+**The trade-off:** voices take up space on your PC (from a few MB up to a few GB), and your PC does the work. Most voices run fine on almost any PC, but the biggest one, ⚡ Orpheus, needs a strong graphics card (see the [FAQ](#faq)).
 
 ## AI use
 
@@ -69,6 +80,8 @@ Next, download `RTTS-Setup-<version>.exe` from [Releases](../../releases/latest)
 Open RTTS and set **Output device** to **CABLE Input**. If you didn't pick a voice in the installer, RTTS downloads one the first time it opens (a few hundred MB), so give it a minute. You can switch voices any time from the menu in the app.
 
 ## How to use RTTS
+
+▶ **[Watch the 1-minute video guide](docs/images/demo.gif)** (a GIF, no sound), or follow the steps below.
 
 Voice chat has to be turned on for your Roblox account.
 
