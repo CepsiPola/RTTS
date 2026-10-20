@@ -29,6 +29,7 @@ import traceback
 import unicodedata
 import urllib.error
 import urllib.request
+import uuid
 import webbrowser
 from collections import namedtuple
 from pathlib import Path
@@ -43,7 +44,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 APP_TITLE = "RTTS"
-APP_VERSION = "1.0.0"      # keep the same as AppVer in RTTS.iss
+APP_VERSION = "1.0.1"      # keep the same as AppVer in RTTS.iss
 USER_AGENT = "RTTS/" + APP_VERSION
 GITHUB_REPO = "CepsiPola/RTTS"
 REPO_URL = "https://github.com/" + GITHUB_REPO
@@ -57,6 +58,12 @@ DATA_DIR = Path(os.environ.get("APPDATA") or Path.home()) / "RTTS"
 SETTINGS_FILE = DATA_DIR / "settings.json"
 ERROR_LOG = DATA_DIR / "error.log"
 UPDATE_DIR = DATA_DIR / "updates"     # downloaded installers; cleared on the next start
+STATS_CHOICE_FILE = DATA_DIR / "voice_stats_choice.txt"   # written by the installer's "voice stats" tick
+# Anonymous voice stats (opt-in, see README > Privacy), sent to PostHog. The project API key starts with "phc_"
+# (PostHog > Project settings); the host is https://us.i.posthog.com or https://eu.i.posthog.com, whichever the
+# project is in. While the key is empty, RTTS sends nothing even with the setting on.
+STATS_API_KEY = "phc_n5WxUgpG4SXEELokVELgR2TY4rLeVya9TuyAUePURW4z"
+STATS_HOST = "https://us.i.posthog.com"
 
 # Before the rename to RTTS this app kept its settings in a folder named after the old name.
 OLD_DATA_DIR = DATA_DIR.parent / "RobloxChatVoice"
@@ -88,6 +95,33 @@ def forget_openai_key():
 
 
 forget_openai_key()
+
+
+def apply_installer_stats_choice():
+    """The installer's "voice stats" tick leaves a 1 / 0 file. Save it as the voice_stats setting, then delete it."""
+    try:
+        choice = STATS_CHOICE_FILE.read_text(encoding="utf-8").strip() == "1"
+    except Exception:
+        return
+    data = {}
+    try:
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            loaded = json.load(f)
+        if isinstance(loaded, dict):
+            data = loaded
+    except Exception:
+        pass
+    data["voice_stats"] = choice
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        STATS_CHOICE_FILE.unlink()
+    except Exception:
+        pass
+
+
+apply_installer_stats_choice()
 
 BASE_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
 PIPER_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
@@ -285,6 +319,7 @@ DEFAULTS = {
     "slash_typed": False,
     "skip_emojis": False,
     "auto_update": False,      # install new versions without asking (Settings > About and updates)
+    "voice_stats": False,      # send which voice is used, nothing else (opt-in; installer tick or Settings)
     "theme": "light",          # light / dark / system
     "topmost": False,
     "start_key": "f6",         # Start / Stop hotkeys (pynput key names), set in Settings > Keybinds
@@ -922,6 +957,35 @@ def fetch_latest_release():
             break
     return {"version": (data.get("tag_name") or "").lstrip("vV"), "url": data.get("html_url") or RELEASES_URL,
             "asset": asset}
+
+
+# --------------------------------------------------------------------------
+#  Anonymous voice stats (only if the user turned them on)
+# --------------------------------------------------------------------------
+STATS_SESSION = uuid.uuid4().hex      # random per launch, never saved, so launches can't be linked
+
+
+def send_voice_stat(model_id, voice):
+    """Tell PostHog which voice is being used. Only the model and voice are sent; failures are ignored."""
+    if not STATS_API_KEY:
+        return
+    body = {
+        "api_key": STATS_API_KEY,
+        "event": "voice_used",
+        "distinct_id": STATS_SESSION,
+        "properties": {
+            "model": model_id,
+            "voice": voice,
+            "$process_person_profile": False,   # no person profile: just an anonymous event
+            "$geoip_disable": True,             # don't look up a location from the IP address
+        },
+    }
+    req = urllib.request.Request(STATS_HOST + "/i/v0/e/", data=json.dumps(body).encode("utf-8"),
+                                 headers={"Content-Type": "application/json", "User-Agent": "RTTS"})
+    try:
+        urllib.request.urlopen(req, timeout=10).close()
+    except Exception:
+        pass
 
 
 def strip_emojis(text):
@@ -1797,6 +1861,8 @@ class App:
         self.v_slash = tk.BooleanVar(value=False)
         self.v_emoji = tk.BooleanVar(value=False)
         self.v_auto = tk.BooleanVar(value=False)
+        self.v_stats = tk.BooleanVar(value=False)
+        self.stats_sent = set()          # (model, voice) already reported this launch
         self.v_theme = tk.StringVar(value="light")
         self.v_top = tk.BooleanVar(value=False)
         self.v_test = tk.StringVar(value="Hello, this is a test.")
@@ -2088,6 +2154,10 @@ class App:
                         command=self.save_ui_prefs).grid(row=2, column=0, sticky="w", pady=(8, 0))
         ttk.Label(g4, text="RTTS checks GitHub for a new version every time it starts. With this on, it updates "
                            "without asking first.", wraplength=380, justify="left").grid(row=3, column=0, sticky="w", pady=(2, 0))
+        ttk.Checkbutton(g4, text="Send anonymous voice stats", variable=self.v_stats,
+                        command=self.save_ui_prefs).grid(row=4, column=0, sticky="w", pady=(8, 0))
+        ttk.Label(g4, text="Only which voice you use is sent, so popular voices can be improved. Nothing you type "
+                           "is ever sent.", wraplength=380, justify="left").grid(row=5, column=0, sticky="w", pady=(2, 0))
 
         ttk.Label(outer, text="Changes here are saved automatically.").grid(row=1, column=0, sticky="w", pady=(0, 6))
         ttk.Button(outer, text="Close", command=self.close_settings).grid(row=2, column=0, sticky="e")
@@ -2310,6 +2380,7 @@ class App:
         data["slash_typed"] = bool(self.v_slash.get())
         data["skip_emojis"] = bool(self.v_emoji.get())
         data["auto_update"] = bool(self.v_auto.get())
+        data["voice_stats"] = bool(self.v_stats.get())
         data["start_key"] = self.hotkeys["start"].name
         data["stop_key"] = self.hotkeys["stop"].name
         try:
@@ -2564,6 +2635,7 @@ class App:
         self.v_slash.set(bool(d.get("slash_typed", False)))
         self.v_emoji.set(bool(d.get("skip_emojis", False)))
         self.v_auto.set(bool(d.get("auto_update", False)))
+        self.v_stats.set(bool(d.get("voice_stats", False)))
         theme = d.get("theme")
         self.v_theme.set(theme if theme in ("light", "dark", "system") else "light")
         self.v_top.set(bool(d.get("topmost", False)))
@@ -2606,6 +2678,7 @@ class App:
             "slash_typed": bool(self.v_slash.get()),
             "skip_emojis": bool(self.v_emoji.get()),
             "auto_update": bool(self.v_auto.get()),
+            "voice_stats": bool(self.v_stats.get()),
             "theme": self.v_theme.get(),
             "topmost": bool(self.v_top.get()),
             "start_key": self.hotkeys["start"].name,
@@ -2626,6 +2699,7 @@ class App:
         d["theme"] = self.v_theme.get()  # looks are chosen in Settings, not reset here
         d["topmost"] = bool(self.v_top.get())
         d["auto_update"] = bool(self.v_auto.get())
+        d["voice_stats"] = bool(self.v_stats.get())   # a privacy choice, so Reset doesn't change it
         d["start_key"] = self.hotkeys["start"].name   # keybinds are chosen in Settings too
         d["stop_key"] = self.hotkeys["stop"].name
         self.apply_settings(d)
@@ -2976,10 +3050,21 @@ class App:
         if not self.apply_chat_key():
             return
         self.running = True
+        self.report_voice()
         if self.engine is None and not self.engine_ready.is_set():
             self.set_status("Running - voice engine is still loading, messages will be spoken once it's ready")
         else:
             self.set_status(self.ready_text())
+
+    def report_voice(self):
+        """With voice stats on, send the model and voice once per launch for each voice that is started."""
+        if not self.v_stats.get():
+            return
+        pick = (self.current_entry()["id"], self.voice_id())
+        if pick in self.stats_sent:
+            return
+        self.stats_sent.add(pick)
+        threading.Thread(target=send_voice_stat, args=pick, daemon=True).start()
 
     def stop_app(self):
         self.running = False

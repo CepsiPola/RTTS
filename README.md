@@ -100,9 +100,15 @@ Voice chat has to be turned on for your Roblox account.
 
 RTTS reads your keyboard only to see what you type in chat, and by default only while Roblox is the active window. The code is public, so you can check.
 
-Every voice runs on your PC, so your messages are never sent anywhere. RTTS needs no account or API key. It only uses the internet to download voices, and to ask GitHub if there's a newer version of RTTS when it starts. Nothing you type is sent.
+Every voice runs on your PC, so your messages are never sent anywhere. RTTS needs no account or API key. It only uses the internet to download voices, to ask GitHub if there's a newer version of RTTS when it starts, and to send anonymous voice stats if you turn them on (see below). Nothing you type is sent.
 
 Orpheus runs in a helper program (llama.cpp's `llama-server`) that RTTS starts on your PC. It only accepts connections from your own computer, and RTTS closes it when you switch models or close RTTS.
+
+### Anonymous voice stats
+
+RTTS can send which voice you use (for example "Kokoro: af_heart"), so I can see which voices are popular and which are worth improving. It's **off unless you tick it**: the installer has an unticked "Send anonymous stats about which voice I use" box, and you can turn it on or off anytime in Settings > General > About and updates. Updates never change your choice.
+
+That is the only thing it sends. It never sends what you type, what you hear, your Roblox username, your keybinds, your files, or anything that identifies you or your PC.
 
 ## FAQ
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.1
+
+**New: optional anonymous voice stats**
+- The installer has a new box, **unticked** by default: "Send anonymous stats about which voice I use".
+- You can turn it on or off anytime in Settings > General > About and updates. Updates never change your choice.
+- When it's on, pressing Start sends only which voice you use (for example "kokoro / af_heart"), once per voice each time you open RTTS. It never sends what you type, your Roblox username, or anything that identifies you or your PC. See [Privacy](README.md#privacy).
+
 ## 1.0.0
 
 The first public release.

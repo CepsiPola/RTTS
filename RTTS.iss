@@ -1,6 +1,6 @@
 ﻿; Inno Setup script for RTTS. Build it with make_installer.bat (after build.bat).
 ; Change the version here when you release a new one.
-#define AppVer "1.0.0"
+#define AppVer "1.0.1"
 
 [Setup]
 AppId={{8F3A5C2E-6B1D-4E7A-9C40-2D5E7A1B3F68}
@@ -55,6 +55,8 @@ Name: "orpheus"; Description: "⚡ Orpheus: most realistic, needs a strong graph
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Shortcuts:"
+; Off unless ticked. CurStepChanged hands the choice to RTTS, which you can change later in Settings.
+Name: "voicestats"; Description: "Send anonymous stats about which voice I use (nothing I type is ever sent)"; GroupDescription: "Optional:"; Flags: unchecked
 
 [Files]
 Source: "dist\RTTS\*"; DestDir: "{app}"; Excludes: "models,models\*"; Components: app; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -269,6 +271,15 @@ begin
   if (CurStep = ssPostInstall) and LlamaMissing
     and FileExists(ModelsDir + '\' + LlamaDir + '\llama-server.exe') then
     SaveStringToFile(LlamaMarker, LlamaSha, False);
+  { Voice stats: RTTS reads this file once on its next start, saves the choice in its settings and deletes it.
+    Silent installs (RTTS's own updater) don't write it, so an update never changes the choice made in Settings. }
+  if (CurStep = ssPostInstall) and not WizardSilent then begin
+    ForceDirectories(ExpandConstant('{userappdata}\RTTS'));
+    if WizardIsTaskSelected('voicestats') then
+      SaveStringToFile(ExpandConstant('{userappdata}\RTTS\voice_stats_choice.txt'), '1', False)
+    else
+      SaveStringToFile(ExpandConstant('{userappdata}\RTTS\voice_stats_choice.txt'), '0', False);
+  end;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
