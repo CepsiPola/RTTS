@@ -13,6 +13,7 @@ Made using AI
 """
 
 import atexit
+import contextlib
 import ctypes
 import hashlib
 import json
@@ -65,6 +66,11 @@ STATS_CHOICE_FILE = DATA_DIR / "voice_stats_choice.txt"   # written by the insta
 # project is in. While the key is empty, RTTS sends nothing even with the setting on.
 STATS_API_KEY = "phc_n5WxUgpG4SXEELokVELgR2TY4rLeVya9TuyAUePURW4z"
 STATS_HOST = "https://us.i.posthog.com"
+
+# RTTS's own text in other languages lives in rtts_i18n.py, next to this file (PyInstaller bundles it).
+if not FROZEN and str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
+from rtts_i18n import UI_FONTS, UI_LANGUAGES, set_ui_language, tr, windows_ui_language  # noqa: E402
 
 # Before the rename to RTTS this app kept its settings in a folder named after the old name.
 OLD_DATA_DIR = DATA_DIR.parent / "RobloxChatVoice"
@@ -182,19 +188,43 @@ def piper_files(path, mb, sha=None):
             remote(name + ".onnx.json", PIPER_URL + path + ".onnx.json", 0, None, 6000)]
 
 
-# espeak-ng voice names; "+m3" / "+f3" are its built-in male / female variants.
-# Its British English voice is called plain "en" ("en-gb" is not a voice name it knows).
-ESPEAK_VOICES = [
-    ("en-us", "Classic (US)"),
-    ("en-us+m3", "Male (US)"),
-    ("en-us+f3", "Female (US)"),
-    ("en+m3", "Male (UK)"),
-    ("en+f3", "Female (UK)"),
-    ("en-us+whisper", "Whisper (US)"),
+# The languages RTTS can speak: (code, name in that language). Picked under Voice > Language; each model
+# lists only its voices for that language, and models with none are hidden (see models_for()).
+LANGUAGES = [
+    ("en", "English"), ("es", "Español"), ("fr", "Français"), ("pt", "Português (Brasil)"), ("de", "Deutsch"),
+    ("hi", "हिन्दी"), ("ru", "Русский"), ("ar", "العربية"), ("zh", "中文 (普通话)"),
 ]
+LANGUAGE_NAMES = dict(LANGUAGES)
+DEFAULT_LANGUAGE = "en"
+# Shown under the voice when its language is picked: how to type messages RTTS can read in that language.
+# (RTTS reads the keys you press. A plain keyboard layout gives it the letters; an input method that turns
+# Latin letters into characters, like Pinyin, doesn't.)
+LANGUAGE_TIPS = {
+    "zh": "Chinese typed with an input method (like Pinyin) can't be read: RTTS only sees the Latin letters you "
+          "press. Paste your message into the chat with Ctrl+V instead.",
+}
+
+# espeak-ng voices: (voice name, label, language). "+m3" / "+f3" are its built-in male / female variants.
+# Its British English voice is called plain "en" ("en-gb" is not a voice name it knows). No Arabic: written
+# Arabic leaves out most vowels, and eSpeak can't add them back, so its Arabic is very hard to understand.
+ESPEAK_VOICES = [
+    ("en-us", "Classic (US)", "en"),
+    ("en-us+m3", "Male (US)", "en"),
+    ("en-us+f3", "Female (US)", "en"),
+    ("en+m3", "Male (UK)", "en"),
+    ("en+f3", "Female (UK)", "en"),
+    ("en-us+whisper", "Whisper (US)", "en"),
+    ("es", "Classic (Spain)", "es"),
+    ("es-419", "Classic (Latin America)", "es"),
+    ("es+m3", "Male (Spain)", "es"),
+    ("es+f3", "Female (Spain)", "es"),
+]
+for _code, _voice in (("fr", "fr"), ("pt", "pt-br"), ("de", "de"), ("hi", "hi"), ("ru", "ru"), ("zh", "cmn")):
+    ESPEAK_VOICES += [(_voice, "Classic", _code), (_voice + "+m3", "Male", _code), (_voice + "+f3", "Female", _code)]
 
 # The model list, from the lightest / most robotic to the heaviest / most natural.
 #   kind  : which engine runs it        where : "local" (every model runs on this PC)
+# Piper voices are (id, label, files, language); each is its own download.
 CATALOG = [
     dict(id="espeak", name="eSpeak", kind="espeak", where="local", params="no neural net",
          note="Robotic. Instant, tiny, almost no CPU."),
@@ -202,21 +232,66 @@ CATALOG = [
          note="Light neural voice. Fast, a bit rough.",
          voices=[("lessac-low", "Lessac (US female)",
                   piper_files("en/en_US/lessac/low/en_US-lessac-low", 63.2,
-                              "f7d01dde371555732c4c314111ac79672b1a5ce2fc19266ab42178fd8df7f375"))]),
+                              "f7d01dde371555732c4c314111ac79672b1a5ce2fc19266ab42178fd8df7f375"), "en"),
+                 ("kerstin-low", "Kerstin (female)",
+                  piper_files("de/de_DE/kerstin/low/de_DE-kerstin-low", 63.1,
+                              "d352a7641892cebf2903859af94e9ba81a141110215fe3943bcda7f7da401b7a"), "de")]),
     dict(id="piper-medium", name="Piper Medium", kind="piper", where="local", params="~16M params",
          note="Natural neural voice. Good all-rounder.",
          voices=[("lessac-medium", "Lessac (US female)",
-                  piper_files("en/en_US/lessac/medium/en_US-lessac-medium", 63.2)),
+                  piper_files("en/en_US/lessac/medium/en_US-lessac-medium", 63.2), "en"),
                  ("alba-medium", "Alba (UK female)",
                   piper_files("en/en_GB/alba/medium/en_GB-alba-medium", 63.2,
-                              "401369c4a81d09fdd86c32c5c864440811dbdcc66466cde2d64f7133a66ad03b")),
+                              "401369c4a81d09fdd86c32c5c864440811dbdcc66466cde2d64f7133a66ad03b"), "en"),
                  ("alan-medium", "Alan (UK male)",
-                  piper_files("en/en_GB/alan/medium/en_GB-alan-medium", 63.2))]),
+                  piper_files("en/en_GB/alan/medium/en_GB-alan-medium", 63.2), "en"),
+                 ("davefx-medium", "Davefx (Spain, male)",
+                  piper_files("es/es_ES/davefx/medium/es_ES-davefx-medium", 63.2,
+                              "6658b03b1a6c316ee4c265a9896abc1393353c2d9e1bca7d66c2c442e222a917"), "es"),
+                 ("ald-medium", "Ald (Mexico, male)",
+                  piper_files("es/es_MX/ald/medium/es_MX-ald-medium", 63.2,
+                              "019b3803293c93e34a206dd2e53a3889209a514e786fd7144f7b70196c579b63"), "es"),
+                 ("siwis-medium", "Siwis (female)",
+                  piper_files("fr/fr_FR/siwis/medium/fr_FR-siwis-medium", 63.2,
+                              "641d1ab097da2b81128c076810edb052b385decc8be3381814802a64a73baf99"), "fr"),
+                 ("tom-medium", "Tom (male)",
+                  piper_files("fr/fr_FR/tom/medium/fr_FR-tom-medium", 63.5,
+                              "bf65074ccdeeeeaa832e75edb1c0a513c01c9a972bdf085ff8a6e71ea234fd41"), "fr"),
+                 ("faber-medium", "Faber (male)",
+                  piper_files("pt/pt_BR/faber/medium/pt_BR-faber-medium", 63.2,
+                              "858555e3a064209c57088fe6bd70c4c3dc54d03eaa00c45d5ecaf43a33f95aa7"), "pt"),
+                 ("thorsten-medium", "Thorsten (male)",
+                  piper_files("de/de_DE/thorsten/medium/de_DE-thorsten-medium", 63.2,
+                              "7e64762d8e5118bb578f2eea6207e1a35a8e0c30595010b666f983fc87bb7819"), "de"),
+                 ("priyamvada-medium", "Priyamvada (female)",
+                  piper_files("hi/hi_IN/priyamvada/medium/hi_IN-priyamvada-medium", 63.5,
+                              "aa63bcf2cd493b55a450f280e23cf77f03afc9af7015e6e5acd43b652f166c88"), "hi"),
+                 ("pratham-medium", "Pratham (male)",
+                  piper_files("hi/hi_IN/pratham/medium/hi_IN-pratham-medium", 63.5,
+                              "169964b0871667f6793416d4b35e97357a68ba1ad01df8580c28048989ee7693"), "hi"),
+                 ("irina-medium", "Irina (female)",
+                  piper_files("ru/ru_RU/irina/medium/ru_RU-irina-medium", 63.2,
+                              "8ff38212d23da300bbe3705c645e6e5b9475f0bfde01558eb17813e22acaaaaa"), "ru"),
+                 ("ruslan-medium", "Ruslan (male)",
+                  piper_files("ru/ru_RU/ruslan/medium/ru_RU-ruslan-medium", 63.2,
+                              "72a5f88e0b20928064eb45d88e1daa21f8af62d18613580d32cbb4aed48dcf7f"), "ru"),
+                 ("kareem-medium", "Kareem (male)",
+                  piper_files("ar/ar_JO/kareem/medium/ar_JO-kareem-medium", 63.2,
+                              "9e95cab07b679da603bba17c4dec7ab3111320571964ee95c0379603c086491e"), "ar"),
+                 ("huayan-medium", "Huayan (female)",
+                  piper_files("zh/zh_CN/huayan/medium/zh_CN-huayan-medium", 63.2,
+                              "9929917bf8cabb26fd528ea44d3a6699c11e87317a14765312420be230be0f3d"), "zh")]),
     dict(id="piper-high", name="Piper High", kind="piper", where="local", params="~30M params",
          note="Clearer neural voice. Bigger and slower.",
          voices=[("ryan-high", "Ryan (US male)",
                   piper_files("en/en_US/ryan/high/en_US-ryan-high", 121,
-                              "b3990d7606e183ec8dbfba70a4607074f162de1a0c412e0180d1ff60bb154eca"))]),
+                              "b3990d7606e183ec8dbfba70a4607074f162de1a0c412e0180d1ff60bb154eca"), "en"),
+                 ("daniela-high", "Daniela (Argentina, female)",
+                  piper_files("es/es_AR/daniela/high/es_AR-daniela-high", 114.2,
+                              "7ceb1fc0dab349418c5b54a639ae9ee595212d7c9ea422220d8419163d5cc985"), "es"),
+                 ("thorsten-high", "Thorsten (male)",
+                  piper_files("de/de_DE/thorsten/high/de_DE-thorsten-high", 113.9,
+                              "9df1c43c61149ef9b39e618e2b861fbe41e1fcea9390b2dac62e8761573ea4f1"), "de")]),
     dict(id="kokoro-fast", name="Kokoro Faster", kind="kokoro", where="local", params="82M params",
          note="Very natural, compressed for speed. Incl. 28 MB voice pack.",
          files=[KOKORO_VOICES, KOKORO_FAST]),
@@ -254,21 +329,41 @@ def is_large(e):
 
 def model_label(e):
     """Text shown in the model drop-down: name, size (and the large-model mark)."""
-    tail = size_text(entry_mb(e)) if entry_mb(e) else "built in"
+    tail = size_text(entry_mb(e)) if entry_mb(e) else tr("built in")
     return "%s%s \u00b7 %s" % (LARGE_MARK + " " if is_large(e) else "", e["name"], tail)
 
 
-def catalog_voices(e):
-    """[(voice_id, label)] for a catalog entry, known before anything is downloaded."""
+def voice_language(e, voice_id):
+    """The language code a voice of catalog entry e speaks."""
     if e["kind"] == "kokoro":
-        return [(v, voice_label(v)) for v in VOICE_ORDER]
+        return KOKORO_LANGUAGES.get(voice_id[:1], "en")
     if e["kind"] == "piper":
-        return [(vid, label) for vid, label, _files in e["voices"]]
+        return next((v[3] for v in e["voices"] if v[0] == voice_id), "en")
     if e["kind"] == "espeak":
-        return list(ESPEAK_VOICES)
-    if e["kind"] == "orpheus":
-        return list(ORPHEUS_VOICES)
-    return [(v, v.capitalize()) for v in e["voices"]]
+        return next((v[2] for v in ESPEAK_VOICES if v[0] == voice_id), "en")
+    return "en"                              # Orpheus speaks English only
+
+
+def catalog_voices(e, lang=None):
+    """[(voice_id, label)] for a catalog entry, known before anything is downloaded; only `lang` if given."""
+    if e["kind"] == "kokoro":
+        pairs = [(v, voice_label(v)) for v in VOICE_ORDER]
+    elif e["kind"] == "piper":
+        pairs = [(v[0], v[1]) for v in e["voices"]]
+    elif e["kind"] == "espeak":
+        pairs = [(v[0], v[1]) for v in ESPEAK_VOICES]
+    elif e["kind"] == "orpheus":
+        pairs = list(ORPHEUS_VOICES)
+    else:
+        pairs = [(v, v.capitalize()) for v in e["voices"]]
+    if lang is not None:
+        pairs = [p for p in pairs if voice_language(e, p[0]) == lang]
+    return pairs
+
+
+def models_for(lang):
+    """The catalog entries that have at least one voice in `lang`, in catalog order."""
+    return [e for e in CATALOG if catalog_voices(e, lang)]
 
 
 def entry_files(e, voice):
@@ -276,9 +371,9 @@ def entry_files(e, voice):
     if e["kind"] == "kokoro":
         return list(e["files"])
     if e["kind"] == "piper":
-        for vid, _label, files in e["voices"]:
-            if vid == voice:
-                return list(files)
+        for v in e["voices"]:
+            if v[0] == voice:
+                return list(v[2])
         return list(e["voices"][0][2])
     if e["kind"] == "orpheus":
         return list(ORPHEUS_FILES)
@@ -289,7 +384,9 @@ def engine_key(e, voice):
     """What identifies a loaded engine: only Piper needs a new load when the voice changes."""
     return (e["id"], voice if e["kind"] == "piper" else "")
 
-# Best sounding first.
+# Kokoro voices, best sounding first within each language. The first letter of a voice id is its language
+# (a / b = US / UK English, e = Spanish, f = French, h = Hindi, p = Brazilian Portuguese). Its Chinese voices
+# are left out: Kokoro's Chinese came out garbled in testing, and Piper's Chinese voice is clear.
 VOICE_ORDER = [
     "af_heart", "af_bella", "af_nicole", "af_sarah", "af_sky", "af_aoede",
     "af_kore", "af_nova", "af_river", "af_alloy", "af_jessica",
@@ -297,8 +394,15 @@ VOICE_ORDER = [
     "am_liam", "am_onyx", "am_santa",
     "bf_emma", "bf_isabella", "bf_alice", "bf_lily",
     "bm_george", "bm_fable", "bm_lewis", "bm_daniel",
+    "ef_dora", "em_alex", "em_santa",
+    "ff_siwis",
+    "hf_alpha", "hf_beta", "hm_omega", "hm_psi",
+    "pf_dora", "pm_alex", "pm_santa",
 ]
-VOICE_KIND = {"af": "US female", "am": "US male", "bf": "UK female", "bm": "UK male"}
+VOICE_KIND = {"af": "US female", "am": "US male", "bf": "UK female", "bm": "UK male",
+              "ef": "female", "em": "male", "ff": "female", "hf": "female", "hm": "male", "pf": "female", "pm": "male"}
+KOKORO_LANGUAGES = {"a": "en", "b": "en", "e": "es", "f": "fr", "h": "hi", "p": "pt"}
+KOKORO_ESPEAK = {"a": "en-us", "b": "en-gb", "e": "es", "f": "fr-fr", "h": "hi", "p": "pt-br"}   # its phonemizer's names
 DEFAULT_VOICE = "af_heart"
 
 MAX_CHAT_CHARS = 200          # Roblox's own chat limit
@@ -310,6 +414,8 @@ CHUNK_FRAMES = 1024
 DEFAULTS = {
     "voice": DEFAULT_VOICE,
     "model": DEFAULT_MODEL,
+    "language": DEFAULT_LANGUAGE,  # the language the voice speaks (Voice > Language)
+    "ui_language": "",         # the language of RTTS's own text; "" = match Windows (English if not supported)
     "output": "",
     "speed": 100,
     "volume": 100,
@@ -336,7 +442,9 @@ UI_FAMILY = "Space Mono"           # main() falls back to Consolas if the bundle
 FONT_SIZE = 9
 
 
-def ui_font(size=FONT_SIZE, bold=False):
+def ui_font(size=None, bold=False):
+    """(family, size[, "bold"]) in RTTS's font; size None = the normal text size (set in main())."""
+    size = FONT_SIZE if size is None else size + (FONT_SIZE - 9)   # other sizes scale with a bigger base size
     return (UI_FAMILY, size, "bold") if bold else (UI_FAMILY, size)
 
 
@@ -462,8 +570,17 @@ def voice_label(voice_id):
     return "%s (%s)" % (voice_id[3:].capitalize(), VOICE_KIND.get(voice_id[:2], "?"))
 
 
+def voice_display(label):
+    """A voice label in RTTS's language: "Lessac (US female)" keeps the name and translates the part in brackets."""
+    m = re.match(r"^(.*?) \((.*)\)$", label)
+    if not m:
+        return tr(label)
+    return "%s (%s)" % (tr(m.group(1)), tr(m.group(2)))
+
+
 def voice_lang(voice_id):
-    return "en-gb" if voice_id.startswith("b") else "en-us"
+    """The phonemizer language Kokoro needs for one of its voices."""
+    return KOKORO_ESPEAK.get(voice_id[:1], "en-us")
 
 
 def log_error(text):
@@ -508,6 +625,8 @@ if IS_WIN:
     _user32.GetWindowTextW.restype = ctypes.c_int
     _user32.GetKeyState.argtypes = (ctypes.c_int,)
     _user32.GetKeyState.restype = ctypes.c_short
+    _user32.GetKeyboardLayout.argtypes = (wintypes.DWORD,)
+    _user32.GetKeyboardLayout.restype = ctypes.c_void_p
     _kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
     _kernel32.OpenProcess.restype = wintypes.HANDLE
     _kernel32.QueryFullProcessImageNameW.argtypes = (
@@ -805,27 +924,27 @@ def large_model_check(entry):
 
     gpu = best_gpu()
     vram = gpu["vram"] / GIB
-    card = gpu["name"] or "No graphics card found"
+    card = gpu["name"] or tr("No graphics card found")
     if gpu["name"] and gpu["vram"]:
-        card += " \u00b7 %d GB video memory" % max(1, round(vram))
+        card += " \u00b7 " + tr("%d GB video memory") % max(1, round(vram))
     if gpu["nvidia"] and vram >= VRAM_GOOD_GB:
-        checks.append(Check("ok", "Your GPU is powerful enough", card))
+        checks.append(Check("ok", tr("Your GPU is powerful enough"), card))
     else:
         if gpu["nvidia"] and vram >= VRAM_MIN_GB:
-            why = "It has less than the 8 GB of video memory this model needs to run smoothly."
+            why = tr("It has less than the 8 GB of video memory this model needs to run smoothly.")
         elif gpu["nvidia"]:
-            why = "It has less than 4 GB of video memory, so most of the model would run on your processor, " \
-                  "which is much slower."
+            why = tr("It has less than 4 GB of video memory, so most of the model would run on your processor, "
+                     "which is much slower.")
         else:
-            why = "Large models run best on an NVIDIA graphics card. On other cards they can be much slower."
-        checks.append(Check("warn", "Your GPU might not be powerful enough to run this model", card + "\n" + why))
+            why = tr("Large models run best on an NVIDIA graphics card. On other cards they can be much slower.")
+        checks.append(Check("warn", tr("Your GPU might not be powerful enough to run this model"), card + "\n" + why))
 
     ram = total_ram() / GIB
     if ram and ram < RAM_GOOD_GB:
-        checks.append(Check("warn", "Your PC has less memory (RAM) than recommended",
-                            "%d GB RAM \u00b7 16 GB recommended" % max(1, round(ram))))
+        checks.append(Check("warn", tr("Your PC has less memory (RAM) than recommended"),
+                            tr("%d GB RAM \u00b7 16 GB recommended") % max(1, round(ram))))
     elif ram:
-        checks.append(Check("ok", "Your PC has enough memory (RAM)", "%d GB RAM" % round(ram)))
+        checks.append(Check("ok", tr("Your PC has enough memory (RAM)"), tr("%d GB RAM") % round(ram)))
 
     # a .zip needs room for itself and for what comes out of it while it is unpacked
     need = sum(r.size * (3 if r.unpack else 1) for r in todo) + 200 * 1000000
@@ -836,11 +955,11 @@ def large_model_check(entry):
         free = None
     drive = os.path.splitdrive(str(APP_DIR))[0] or str(APP_DIR)
     if free is not None and free < need:
-        checks.append(Check("bad", "Not enough free space",
-                            "Needs %s on %s, but only %s is free. Free up some space, then pick this model again."
-                            % (size_text(need / 1e6), drive, size_text(free / 1e6))))
+        checks.append(Check("bad", tr("Not enough free space"),
+                            tr("Needs %s on %s, but only %s is free. Free up some space, then pick this model "
+                               "again.") % (size_text(need / 1e6), drive, size_text(free / 1e6))))
     elif free is not None:
-        checks.append(Check("ok", "Enough free space", "%s free on %s" % (size_text(free / 1e6), drive)))
+        checks.append(Check("ok", tr("Enough free space"), tr("%s free on %s") % (size_text(free / 1e6), drive)))
     return checks, download, not any(c.level == "bad" for c in checks)
 
 
@@ -879,9 +998,9 @@ def download_file(url, dest, expected_size, expected_sha, progress):
                 progress(done, total)
         want = expected_size or announced
         if want and part.stat().st_size != want:
-            raise IOError("Download was incomplete (%d of %d bytes)." % (part.stat().st_size, want))
+            raise IOError(tr("Download was incomplete (%d of %d bytes).") % (part.stat().st_size, want))
         if expected_sha and sha256_of(part) != expected_sha:
-            raise IOError("Downloaded file is corrupted (checksum mismatch). Please try again.")
+            raise IOError(tr("Downloaded file is corrupted (checksum mismatch). Please try again."))
         os.replace(part, dest)
     except BaseException:
         try:
@@ -943,7 +1062,7 @@ def ensure_files(files, label, status, prog, cancelled=None, speed=None):
     last = [0.0]
     samples = []              # (time, bytes received) over the last ~1.5 s, for the MB/s readout
     received = [0]            # bytes actually received for the files that are already finished
-    status("Downloading %s ..." % label)
+    status(tr("Downloading %s ...") % label)
     prog(0)
     for r in todo:
         weight = r.size or r.approx
@@ -959,7 +1078,7 @@ def ensure_files(files, label, status, prog, cancelled=None, speed=None):
             last[0] = now
             got = min(grand, base + done)
             pct = min(99, int(got * 100 // grand))
-            status("Downloading %s: %d%% (%.0f of %.0f MB)" % (label, pct, got / 1e6, grand / 1e6))
+            status(tr("Downloading %s: %d%% (%.0f of %.0f MB)") % (label, pct, got / 1e6, grand / 1e6))
             prog(pct)
             if speed is not None:
                 have = received[0] + done
@@ -975,7 +1094,7 @@ def ensure_files(files, label, status, prog, cancelled=None, speed=None):
                 and (not r.sha or sha256_of(zip_path) == r.sha)):     # a finished .zip that wasn't unpacked yet
             download_file(r.url, zip_path, r.size, r.sha, progress)
         if r.unpack:
-            status("Unpacking %s ..." % label)
+            status(tr("Unpacking %s ...") % label)
             unpack_zip(r)
         finished += weight
         received[0] += seen[0]
@@ -1138,6 +1257,17 @@ ROBLOX_KEYS = {
 }
 DEFAULT_HOTKEYS = {"start": "f6", "stop": "f7"}
 
+# Where a chat-key character sits on a US keyboard (scan codes), to find that key under a non-Latin layout
+US_SCAN_CODES = {"/": 0x35, "\\": 0x2B, ";": 0x27, "'": 0x28, "`": 0x29, "-": 0x0C, "=": 0x0D, "[": 0x1A,
+                 "]": 0x1B, ",": 0x33, ".": 0x34}
+US_SCAN_CODES.update(zip("qwertyuiop", range(0x10, 0x1A)))
+US_SCAN_CODES.update(zip("asdfghjkl", range(0x1E, 0x27)))
+US_SCAN_CODES.update(zip("zxcvbnm", range(0x2C, 0x33)))
+# Primary language ids of keyboard layouts that don't type Latin letters: Arabic, Bulgarian, Chinese, Greek,
+# Hebrew, Japanese, Korean, Russian, Thai, Persian, Ukrainian, Belarusian, Hindi, Bengali, Tamil, Kazakh ...
+NON_LATIN_LANGUAGE_IDS = {0x01, 0x02, 0x04, 0x08, 0x0D, 0x11, 0x12, 0x19, 0x1E, 0x29, 0x22, 0x23, 0x39, 0x45,
+                          0x46, 0x47, 0x49, 0x4A, 0x4B, 0x4E, 0x3F, 0x28, 0x2F, 0x40, 0x44, 0x50}
+
 
 def hotkey_name(key):
     """The settings name of a Start / Stop key (e.g. "f6"), or None if the key can't be one."""
@@ -1151,7 +1281,7 @@ def key_display(key):
     name = getattr(key, "name", None)
     if not name:
         ch = getattr(key, "char", None)
-        return ch.upper() if ch and ch.strip() else "That key"
+        return ch.upper() if ch and ch.strip() else tr("That key")
     if re.fullmatch(r"f\d+", name):
         return name.upper()
     return name.replace("_", " ").title()
@@ -1291,10 +1421,10 @@ class ESpeakEngine(Engine):
         self.raw = espeak_raw()
 
     def voice_list(self):
-        return list(ESPEAK_VOICES)
+        return [(v[0], v[1]) for v in ESPEAK_VOICES]
 
     def synth(self, text, voice, speed):
-        if voice not in dict(ESPEAK_VOICES):
+        if voice not in {v[0] for v in ESPEAK_VOICES}:
             voice = ESPEAK_VOICES[0][0]
         pcm, rate = self.raw.synth(text, voice, min(450, max(80, int(175 * speed))))
         peak = float(np.max(np.abs(pcm))) if pcm.size else 0.0
@@ -1481,11 +1611,11 @@ class OrpheusEngine(Engine):
             raise CorruptModel(str(e)) from e
         self.exe = next(iter(sorted(Path(server_dir).rglob("llama-server.exe"))), None)
         if self.exe is None:
-            raise RuntimeError("llama-server.exe is missing from %s." % server_dir)
+            raise RuntimeError(tr("llama-server.exe is missing from %s.") % server_dir)
         self.model_path = model_path
         self.extra = []
         atexit.register(self.close)
-        status("Starting Orpheus on your graphics card ...")
+        status(tr("Starting Orpheus on your graphics card ..."))
         try:
             try:
                 self._start(cancelled)
@@ -1493,13 +1623,13 @@ class OrpheusEngine(Engine):
                 raise
             except Exception:
                 log_error(traceback.format_exc())
-                status("Orpheus couldn't use your graphics card, starting it on your processor (much slower) ...")
+                status(tr("Orpheus couldn't use your graphics card, starting it on your processor (much slower) ..."))
                 self.extra = ["-ngl", "0"]
                 self._start(cancelled)
         except BaseException:
             self.close()                  # never leave a half-started llama-server behind
             raise
-        status("Warming up Orpheus ...")
+        status(tr("Warming up Orpheus ..."))
         try:  # warm-up so the first real message isn't slow (and to measure how fast this PC runs it)
             self.speak("Hello there, this is a quick test.", ORPHEUS_VOICES[0][0], 1.0)
         except Exception:
@@ -1522,7 +1652,7 @@ class OrpheusEngine(Engine):
                 self.close()
                 raise DownloadCancelled()
             if self.proc.poll() is not None:
-                raise RuntimeError("Orpheus stopped while it was loading (code %s). Details are in %s"
+                raise RuntimeError(tr("Orpheus stopped while it was loading (code %s). Details are in %s")
                                    % (self.proc.returncode, self.LOG))
             try:
                 # a short timeout: on Windows a connection to a port nobody listens on yet can hang until it runs out
@@ -1532,7 +1662,7 @@ class OrpheusEngine(Engine):
             except (urllib.error.URLError, OSError):     # not listening yet, or 503 while the model loads
                 pass
             if time.time() > deadline:
-                raise RuntimeError("Orpheus took too long to start. Details are in %s" % self.LOG)
+                raise RuntimeError(tr("Orpheus took too long to start. Details are in %s") % self.LOG)
             time.sleep(0.1)
 
     def _ensure_running(self):
@@ -1544,10 +1674,10 @@ class OrpheusEngine(Engine):
 
     def _failed(self, e):
         if self.closed:
-            return RuntimeError("Orpheus was switched off.")
+            return RuntimeError(tr("Orpheus was switched off."))
         if self.proc is None or self.proc.poll() is not None:
-            return RuntimeError("Orpheus stopped working. It will start again with the next message.")
-        return RuntimeError("Couldn't get speech from Orpheus: %s" % e)
+            return RuntimeError(tr("Orpheus stopped working. It will start again with the next message."))
+        return RuntimeError(tr("Couldn't get speech from Orpheus: %s") % e)
 
     def _open(self, path, body, timeout):
         req = urllib.request.Request(self.url + path, data=json.dumps(body).encode("utf-8"),
@@ -1573,7 +1703,7 @@ class OrpheusEngine(Engine):
     def stream(self, text, voice, speed, cancelled=lambda: False):
         """Yield the speech as pieces of float32 audio (24 kHz) while Orpheus is still writing it."""
         if self.closed:
-            raise RuntimeError("Orpheus was switched off.")
+            raise RuntimeError(tr("Orpheus was switched off."))
         self._ensure_running()
         if voice not in dict(ORPHEUS_VOICES):
             voice = ORPHEUS_VOICES[0][0]
@@ -1685,17 +1815,17 @@ def build_engine(entry, voice, status, prog, cancelled, speed=None):
     """Download whatever is missing, then load the engine. Runs on a background thread."""
     kind = entry["kind"]
     if kind == "espeak":
-        status("Loading eSpeak ...")
+        status(tr("Loading eSpeak ..."))
         return ESpeakEngine()
     if kind == "kokoro":
         paths = ensure_files(entry["files"], entry["name"], status, prog, cancelled, speed)
-        status("Loading voice engine (first start can take a few seconds)...")
+        status(tr("Loading voice engine (first start can take a few seconds)..."))
         return KokoroEngine(paths[1], paths[0])
     if kind == "piper":
-        vid, label, files = next((v for v in entry["voices"] if v[0] == voice), entry["voices"][0])
+        vid, label, files = next((v for v in entry["voices"] if v[0] == voice), entry["voices"][0])[:3]
         paths = ensure_files(files, "%s (%s)" % (entry["name"], label.split(" (")[0]), status, prog, cancelled,
                              speed)
-        status("Loading %s ..." % entry["name"])
+        status(tr("Loading %s ...") % entry["name"])
         try:
             return PiperEngine(vid, label, paths[0], paths[1])
         except CorruptModel as e:
@@ -1704,8 +1834,8 @@ def build_engine(entry, voice, status, prog, cancelled, speed=None):
                     p.unlink()
                 except Exception:
                     pass
-            raise RuntimeError("The voice file looked damaged, so it was deleted. "
-                               "Pick the voice again to re-download it. (%s)" % e)
+            raise RuntimeError(tr("The voice file looked damaged, so it was deleted. "
+                                  "Pick the voice again to re-download it. (%s)") % e)
     if kind == "orpheus":
         ensure_files(ORPHEUS_FILES, entry["name"], status, prog, cancelled, speed)
         return OrpheusEngine(MODEL_DIR / ORPHEUS_MODEL.name, MODEL_DIR / SNAC_DECODER.name, MODEL_DIR / LLAMA_DIR,
@@ -2215,6 +2345,8 @@ class App:
         self.binding = None
         self.bind_btns = {}
         self.v_bind = {}
+        self.last_layout = None            # keyboard layout of the window in front (see follow_keyboard_layout)
+        self.non_latin_layout = False      # ... and whether it types a non-Latin script (see _is_chat_key)
 
         # Settings mirrored for the listener thread (plain values, replaced atomically)
         self.snap = {"keyspec": ("char", "/"), "only": True, "slash": False,
@@ -2222,6 +2354,7 @@ class App:
         self.recent = []
 
         self.settings_win = None
+        self.ui_language_setting = ""      # Settings > General > Language: a UI_LANGUAGES code, "" = match Windows
         self.theme = THEMES[DEFAULT_THEME]   # the colours in use (see apply_theme)
         self.theme_images = {}             # ttk theme name -> its bevel images (kept alive here)
         self.tiles = {}                    # Settings > Appearance: theme key -> ThemeTile
@@ -2253,7 +2386,7 @@ class App:
         root.after(250, self.tick)
         if self.needs_large_confirm(self.current_entry()):
             # a large model is saved as the choice but its files aren't here: ask first, once the window is up
-            self.set_status("Waiting for you to confirm the %s download ..." % self.current_entry()["name"])
+            self.set_status(tr("Waiting for you to confirm the %s download ...") % self.current_entry()["name"])
             root.after(300, self.confirm_startup_model)
         else:
             self.start_engine_load(self.current_entry(), self.voice_id())
@@ -2268,6 +2401,8 @@ class App:
         r.columnconfigure(0, weight=1)
 
         self.v_voice = tk.StringVar()
+        self.v_lang = tk.StringVar(value=LANGUAGE_NAMES[DEFAULT_LANGUAGE])   # shows the language's own name
+        self.v_lang_note = tk.StringVar()
         self.v_model = tk.StringVar()
         self.v_output = tk.StringVar()
         self.v_speed = tk.DoubleVar(value=100)
@@ -2285,8 +2420,8 @@ class App:
         self.v_custom_accent = tk.StringVar(value=DEFAULTS["custom_accent"])
         self.v_custom_base = tk.StringVar(value=DEFAULTS["custom_base"])
         self.v_top = tk.BooleanVar(value=False)
-        self.v_test = tk.StringVar(value="Hello, this is a test.")
-        self.v_status = tk.StringVar(value="Starting...")
+        self.v_test = tk.StringVar(value=tr("Hello, this is a test."))
+        self.v_status = tk.StringVar(value=tr("Starting..."))
         self.v_info = tk.StringVar()
         self.v_pct = tk.StringVar()
         self.v_speed_txt = tk.StringVar(value="100%")
@@ -2296,69 +2431,78 @@ class App:
         outer.grid(row=0, column=0)
 
         # Voice group
-        g1 = ttk.LabelFrame(outer, text="Voice", padding=(10, 6))
+        g1 = ttk.LabelFrame(outer, text=tr("Voice"), padding=(10, 6))
         g1.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         g1.columnconfigure(2, weight=1)
-        ttk.Label(g1, text="Model / voice:").grid(row=0, column=0, sticky="w", pady=2)
+        ttk.Label(g1, text=tr("Language:")).grid(row=0, column=0, sticky="w", pady=2)
+        self.cb_lang = ttk.Combobox(g1, textvariable=self.v_lang, state="readonly",
+                                    values=[name for _code, name in LANGUAGES], width=20)
+        self.cb_lang.grid(row=0, column=1, sticky="w", pady=2)
+        ttk.Label(g1, text=tr("Model / voice:")).grid(row=1, column=0, sticky="w", pady=2)
         labels = [model_label(e) for e in CATALOG]
         self.cb_model = ttk.Combobox(g1, textvariable=self.v_model, state="readonly",
                                      values=labels, width=max(len(t) for t in labels))
-        self.cb_model.grid(row=0, column=1, sticky="w", pady=2)
+        self.cb_model.grid(row=1, column=1, sticky="w", pady=2)
         self.cb_voice = ttk.Combobox(g1, textvariable=self.v_voice, state="readonly", width=20)
-        self.cb_voice.grid(row=0, column=2, sticky="ew", padx=(6, 0), pady=2)
+        self.cb_voice.grid(row=1, column=2, sticky="ew", padx=(6, 0), pady=2)
         ttk.Label(g1, textvariable=self.v_info, justify="left", style="Hint.TLabel").grid(
-            row=1, column=0, columnspan=3, sticky="w", pady=(0, 2))
-        ttk.Label(g1, text="Output device:").grid(row=2, column=0, sticky="w", pady=2)
+            row=2, column=0, columnspan=3, sticky="w", pady=(0, 2))
+        # Shown when the language isn't English: which models can't speak it (and typing tips for some)
+        self.lbl_lang_note = ttk.Label(g1, textvariable=self.v_lang_note, justify="left", style="Warn.TLabel",
+                                       wraplength=1)
+        self.lbl_lang_note.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(0, 2))
+        self.lbl_lang_note.bind("<Configure>", lambda e: self.lbl_lang_note.configure(wraplength=max(200, e.width)))
+        ttk.Label(g1, text=tr("Output device:")).grid(row=4, column=0, sticky="w", pady=2)
         self.cb_out = ttk.Combobox(g1, textvariable=self.v_output, state="readonly", width=36)
-        self.cb_out.grid(row=2, column=1, columnspan=2, sticky="ew", pady=2)
+        self.cb_out.grid(row=4, column=1, columnspan=2, sticky="ew", pady=2)
         bf = ttk.Frame(g1)
-        bf.grid(row=3, column=1, columnspan=2, sticky="w", pady=(4, 0))
-        ttk.Button(bf, text="Refresh devices", command=self.refresh_devices).pack(side="left")
-        ttk.Button(bf, text="Get VB-Cable",
+        bf.grid(row=5, column=1, columnspan=2, sticky="w", pady=(4, 0))
+        ttk.Button(bf, text=tr("Refresh devices"), command=self.refresh_devices).pack(side="left")
+        ttk.Button(bf, text=tr("Get VB-Cable"),
                    command=lambda: webbrowser.open("https://vb-audio.com/Cable/")).pack(side="left", padx=(6, 0))
 
         # Voice options
-        g2 = ttk.LabelFrame(outer, text="Voice Options", padding=(10, 6))
+        g2 = ttk.LabelFrame(outer, text=tr("Voice Options"), padding=(10, 6))
         g2.grid(row=1, column=0, sticky="ew", pady=(0, 6))
         g2.columnconfigure(1, weight=1)
-        ttk.Label(g2, text="Speed").grid(row=0, column=0, sticky="w", pady=2)
+        ttk.Label(g2, text=tr("Speed")).grid(row=0, column=0, sticky="w", pady=2)
         sl_speed = FlatSlider(g2, 60, 160, self.v_speed, self.on_slider)
         sl_speed.grid(row=0, column=1, sticky="ew", padx=8, pady=2)
         ttk.Label(g2, textvariable=self.v_speed_txt, width=6).grid(row=0, column=2)
-        ttk.Label(g2, text="Volume").grid(row=1, column=0, sticky="w", pady=2)
+        ttk.Label(g2, text=tr("Volume")).grid(row=1, column=0, sticky="w", pady=2)
         sl_volume = FlatSlider(g2, 0, 100, self.v_volume, self.on_slider)
         sl_volume.grid(row=1, column=1, sticky="ew", padx=8, pady=2)
         ttk.Label(g2, textvariable=self.v_vol_txt, width=6).grid(row=1, column=2)
         self.sliders = [sl_speed, sl_volume]           # recoloured to the window background by apply_theme
 
         # Chat options
-        g3 = ttk.LabelFrame(outer, text="Chat Options", padding=(10, 6))
+        g3 = ttk.LabelFrame(outer, text=tr("Chat Options"), padding=(10, 6))
         g3.grid(row=2, column=0, sticky="ew", pady=(0, 6))
-        ttk.Label(g3, text="Chat key:").grid(row=0, column=0, sticky="w")
+        ttk.Label(g3, text=tr("Chat key:")).grid(row=0, column=0, sticky="w")
         self.ed_key = ttk.Entry(g3, textvariable=self.v_key, width=6)
         self.ed_key.grid(row=0, column=1, sticky="w", padx=(6, 8))
-        ttk.Label(g3, text="Press this in Roblox to open chat").grid(row=0, column=2, sticky="w")
+        ttk.Label(g3, text=tr("Press this in Roblox to open chat")).grid(row=0, column=2, sticky="w")
         self.ed_key.bind("<FocusOut>", lambda e: self.apply_chat_key())
         self.ed_key.bind("<Return>", lambda e: self.apply_chat_key())
-        ttk.Checkbutton(g3, text="Only work while Roblox is the active window",
+        ttk.Checkbutton(g3, text=tr("Only work while Roblox is the active window"),
                         variable=self.v_only, command=self.sync_snap).grid(
             row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
-        ttk.Checkbutton(g3, text="Also play the voice on my speakers",
+        ttk.Checkbutton(g3, text=tr("Also play the voice on my speakers"),
                         variable=self.v_mon).grid(row=2, column=0, columnspan=3, sticky="w", pady=(2, 0))
-        ttk.Checkbutton(g3, text="A new message stops the one that is playing",
+        ttk.Checkbutton(g3, text=tr("A new message stops the one that is playing"),
                         variable=self.v_interrupt).grid(row=3, column=0, columnspan=3, sticky="w", pady=(2, 0))
 
         # Test
-        g4 = ttk.LabelFrame(outer, text="Test", padding=(10, 6))
+        g4 = ttk.LabelFrame(outer, text=tr("Test"), padding=(10, 6))
         g4.grid(row=3, column=0, sticky="ew", pady=(0, 6))
         g4.columnconfigure(0, weight=1)
         e = ttk.Entry(g4, textvariable=self.v_test)
         e.grid(row=0, column=0, sticky="ew")
         e.bind("<Return>", lambda ev: self.test_speak())
-        ttk.Button(g4, text="Speak", command=self.test_speak).grid(row=0, column=1, padx=(6, 0))
+        ttk.Button(g4, text=tr("Speak"), command=self.test_speak).grid(row=0, column=1, padx=(6, 0))
 
         # Recent messages
-        g5 = ttk.LabelFrame(outer, text="Recent Messages", padding=(10, 6))
+        g5 = ttk.LabelFrame(outer, text=tr("Recent Messages"), padding=(10, 6))
         g5.grid(row=4, column=0, sticky="ew", pady=(0, 6))
         g5.columnconfigure(0, weight=1)
         box = ttk.Frame(g5, style="Field.TFrame", padding=2 * pixel_scale(r))   # sunken box: text + scroll bar
@@ -2381,9 +2525,9 @@ class App:
         self.btn_stop = ttk.Button(bb, command=self.stop_app)
         self.btn_stop.grid(row=0, column=1, sticky="ew", padx=4)
         self.update_hotkey_labels()
-        ttk.Button(bb, text="Save Settings", command=self.save_settings).grid(row=0, column=2, sticky="ew", padx=4)
-        ttk.Button(bb, text="Reset Settings", command=self.reset_settings).grid(row=0, column=3, sticky="ew", padx=4)
-        ttk.Button(bb, text="Settings...", command=self.open_settings).grid(row=0, column=4, sticky="ew", padx=(4, 0))
+        ttk.Button(bb, text=tr("Save Settings"), command=self.save_settings).grid(row=0, column=2, sticky="ew", padx=4)
+        ttk.Button(bb, text=tr("Reset Settings"), command=self.reset_settings).grid(row=0, column=3, sticky="ew", padx=4)
+        ttk.Button(bb, text=tr("Settings..."), command=self.open_settings).grid(row=0, column=4, sticky="ew", padx=(4, 0))
 
         # Download progress: at the bottom, just above the status bar. Percentage and speed on the left.
         # Only shown while a voice file is downloading (show_progress_row); the window shrinks back after.
@@ -2402,9 +2546,10 @@ class App:
 
         self.cb_voice.bind("<<ComboboxSelected>>", self.on_voice_change)
         self.cb_model.bind("<<ComboboxSelected>>", self.on_model_change)
+        self.cb_lang.bind("<<ComboboxSelected>>", self.on_language_change)
         default = CATALOG_BY_ID[DEFAULT_MODEL]
         self.v_model.set(model_label(default))
-        self.fill_voice_list(catalog_voices(default), prefer=DEFAULT_VOICE)
+        self.fill_voice_list(catalog_voices(default, DEFAULT_LANGUAGE), prefer=DEFAULT_VOICE)
         self.fill_devices(self.v_output.get())
 
     # ---------------- look: icon, light/dark theme, settings window ----------------
@@ -2448,9 +2593,9 @@ class App:
                                selectbackground=t["accent_dark"], selectforeground=on_color(t["accent_dark"]),
                                inactiveselectbackground=t["accent_dark"])
         # the drop-down list of the comboboxes is a plain Tk listbox
-        combos = [self.cb_voice, self.cb_model, self.cb_out]
-        if self.tiles:                     # Settings is open: its Base menu too
-            combos.append(self.cb_base)
+        combos = [self.cb_lang, self.cb_voice, self.cb_model, self.cb_out]
+        if self.tiles:                     # Settings is open: its menus too
+            combos += [self.cb_base, self.cb_ui_lang]
         for cb in combos:
             try:
                 lb = "%s.f.l" % self.root.tk.call("ttk::combobox::PopdownWindow", cb)
@@ -2472,7 +2617,7 @@ class App:
             return
         w = tk.Toplevel(self.root)
         self.settings_win = w
-        w.title("%s - Settings" % APP_TITLE)
+        w.title(tr("%s - Settings") % APP_TITLE)
         w.resizable(False, False)
         w.transient(self.root)
         self.apply_icon(w)
@@ -2485,50 +2630,63 @@ class App:
         general = ttk.Frame(nb, padding=(8, 8, 8, 2))
         appearance = ttk.Frame(nb, padding=(8, 8, 8, 2))
         keybinds = ttk.Frame(nb, padding=(8, 8, 8, 2))
-        nb.add(general, text="General")
-        nb.add(appearance, text="Appearance")
-        nb.add(keybinds, text="Keybinds")
+        nb.add(general, text=tr("General"))
+        nb.add(appearance, text=tr("Appearance"))
+        nb.add(keybinds, text=tr("Keybinds"))
         self.build_appearance_tab(appearance)
         self.build_keybinds_tab(keybinds)
 
-        g2 = ttk.LabelFrame(general, text="Window", padding=(10, 6))
+        g1 = ttk.LabelFrame(general, text=tr("Language"), padding=(10, 6))
+        g1.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        ttk.Label(g1, text=tr("RTTS in:")).grid(row=0, column=0, sticky="w")
+        choices = [tr("Match Windows")] + [name for _code, name in UI_LANGUAGES]
+        self.cb_ui_lang = ttk.Combobox(g1, values=choices, state="readonly", width=22)
+        self.cb_ui_lang.set(self.ui_language_name(self.ui_language_setting))
+        self.cb_ui_lang.grid(row=0, column=1, sticky="w", padx=(8, 0))
+        self.cb_ui_lang.bind("<<ComboboxSelected>>", self.on_ui_language_change)
+        ttk.Label(g1, style="Hint.TLabel", wraplength=380, justify="left",
+                  text=tr("The language of RTTS's buttons and messages. The language the voice speaks is "
+                          "picked in the main window, under Voice.")).grid(row=1, column=0, columnspan=2,
+                                                                          sticky="w", pady=(4, 0))
+
+        g2 = ttk.LabelFrame(general, text=tr("Window"), padding=(10, 6))
         g2.grid(row=1, column=0, sticky="ew", pady=(0, 6))
-        ttk.Checkbutton(g2, text="Keep this window on top of other windows",
+        ttk.Checkbutton(g2, text=tr("Keep this window on top of other windows"),
                         variable=self.v_top, command=self.on_topmost_change).grid(row=0, column=0, sticky="w")
 
-        g3 = ttk.LabelFrame(general, text="Experimental", padding=(10, 6))
+        g3 = ttk.LabelFrame(general, text=tr("Experimental"), padding=(10, 6))
         g3.grid(row=2, column=0, sticky="ew", pady=(0, 6))
-        ttk.Checkbutton(g3, text='Roblox types a "/" in the chat box when I press "/"',
+        ttk.Checkbutton(g3, text=tr('Roblox types a "/" in the chat box when I press "/"'),
                         variable=self.v_slash, command=self.on_slash_change).grid(row=0, column=0, sticky="w")
-        ttk.Label(g3, text='Lets RTTS skip emote commands such as "/e dance" instead of speaking them.',
+        ttk.Label(g3, text=tr('Lets RTTS skip emote commands such as "/e dance" instead of speaking them.'),
                   wraplength=380, justify="left").grid(row=1, column=0, sticky="w", pady=(2, 0))
         ttk.Label(g3, style="Warn.TLabel", wraplength=380, justify="left",
-                  text="Warning: this might not work. Most versions of Roblox do not type the \"/\", "
-                       "and if yours doesn't, none of your messages will be spoken. "
-                       "If that happens, turn this off.").grid(row=2, column=0, sticky="w", pady=(4, 0))
-        ttk.Checkbutton(g3, text="Skip emojis", variable=self.v_emoji,
+                  text=tr("Warning: this might not work. Most versions of Roblox do not type the \"/\", "
+                          "and if yours doesn't, none of your messages will be spoken. "
+                          "If that happens, turn this off.")).grid(row=2, column=0, sticky="w", pady=(4, 0))
+        ttk.Checkbutton(g3, text=tr("Skip emojis"), variable=self.v_emoji,
                         command=self.save_ui_prefs).grid(row=3, column=0, sticky="w", pady=(10, 0))
-        ttk.Label(g3, text="Emojis are left out instead of being read out. A message that is only emojis "
-                           "isn't spoken.", wraplength=380, justify="left").grid(row=4, column=0, sticky="w", pady=(2, 0))
+        ttk.Label(g3, text=tr("Emojis are left out instead of being read out. A message that is only emojis "
+                              "isn't spoken."), wraplength=380, justify="left").grid(row=4, column=0, sticky="w", pady=(2, 0))
 
-        g4 = ttk.LabelFrame(general, text="About and updates", padding=(10, 6))
+        g4 = ttk.LabelFrame(general, text=tr("About and updates"), padding=(10, 6))
         g4.grid(row=3, column=0, sticky="ew", pady=(0, 6))
         ttk.Label(g4, text="RTTS %s" % APP_VERSION, style="Bold.TLabel").grid(row=0, column=0, sticky="w")
         bf = ttk.Frame(g4)
         bf.grid(row=1, column=0, sticky="w", pady=(4, 0))
-        ttk.Button(bf, text="Check for updates", command=lambda: self.start_update_check(manual=True)).pack(side="left")
-        ttk.Button(bf, text="GitHub page", command=lambda: webbrowser.open(REPO_URL)).pack(side="left", padx=(6, 0))
-        ttk.Checkbutton(g4, text="Install updates automatically", variable=self.v_auto,
+        ttk.Button(bf, text=tr("Check for updates"), command=lambda: self.start_update_check(manual=True)).pack(side="left")
+        ttk.Button(bf, text=tr("GitHub page"), command=lambda: webbrowser.open(REPO_URL)).pack(side="left", padx=(6, 0))
+        ttk.Checkbutton(g4, text=tr("Install updates automatically"), variable=self.v_auto,
                         command=self.save_ui_prefs).grid(row=2, column=0, sticky="w", pady=(8, 0))
-        ttk.Label(g4, text="RTTS checks GitHub for a new version every time it starts. With this on, it updates "
-                           "without asking first.", wraplength=380, justify="left").grid(row=3, column=0, sticky="w", pady=(2, 0))
-        ttk.Checkbutton(g4, text="Send anonymous voice stats", variable=self.v_stats,
+        ttk.Label(g4, text=tr("RTTS checks GitHub for a new version every time it starts. With this on, it updates "
+                              "without asking first."), wraplength=380, justify="left").grid(row=3, column=0, sticky="w", pady=(2, 0))
+        ttk.Checkbutton(g4, text=tr("Send anonymous voice stats"), variable=self.v_stats,
                         command=self.save_ui_prefs).grid(row=4, column=0, sticky="w", pady=(8, 0))
-        ttk.Label(g4, text="Only which voice you use is sent, so popular voices can be improved. Nothing you type "
-                           "is ever sent.", wraplength=380, justify="left").grid(row=5, column=0, sticky="w", pady=(2, 0))
+        ttk.Label(g4, text=tr("Only which voice you use is sent, so popular voices can be improved. Nothing you type "
+                              "is ever sent."), wraplength=380, justify="left").grid(row=5, column=0, sticky="w", pady=(2, 0))
 
-        ttk.Label(outer, text="Changes here are saved automatically.").grid(row=1, column=0, sticky="w", pady=(0, 6))
-        ttk.Button(outer, text="Close", command=self.close_settings).grid(row=2, column=0, sticky="e")
+        ttk.Label(outer, text=tr("Changes here are saved automatically.")).grid(row=1, column=0, sticky="w", pady=(0, 6))
+        ttk.Button(outer, text=tr("Close"), command=self.close_settings).grid(row=2, column=0, sticky="e")
 
         self.root.update_idletasks()
         w.geometry("+%d+%d" % (self.root.winfo_x() + 40, self.root.winfo_y() + 40))
@@ -2537,7 +2695,7 @@ class App:
 
     def build_appearance_tab(self, tab):
         tab.columnconfigure(0, weight=1)
-        g = ttk.LabelFrame(tab, text="Theme", padding=(10, 6))
+        g = ttk.LabelFrame(tab, text=tr("Theme"), padding=(10, 6))
         g.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         self.tiles = {}
         self.tile_labels = {}
@@ -2550,29 +2708,29 @@ class App:
             lbl.grid(row=1, column=0, pady=(2, 0))
             lbl.bind("<Button-1>", lambda e, k=key: self.pick_theme(k))
 
-        g2 = ttk.LabelFrame(tab, text="Custom theme", padding=(10, 6))
+        g2 = ttk.LabelFrame(tab, text=tr("Custom theme"), padding=(10, 6))
         g2.grid(row=1, column=0, sticky="ew", pady=(0, 6))
         k = max(1.0, self.root.winfo_fpixels("1i") / 96.0)
-        ttk.Label(g2, text="Colour:").grid(row=0, column=0, sticky="w")
+        ttk.Label(g2, text=tr("Colour:")).grid(row=0, column=0, sticky="w")
         self.swatch = tk.Canvas(g2, width=int(round(40 * k)), height=int(round(22 * k)), highlightthickness=0,
                                 bd=0, cursor="hand2")
         self.swatch.grid(row=0, column=1, padx=(8, 8))
         self.swatch.bind("<Button-1>", lambda e: self.pick_custom_color())
-        ttk.Button(g2, text="Pick colour...", command=self.pick_custom_color).grid(row=0, column=2, sticky="w")
-        ttk.Label(g2, text="Base:").grid(row=0, column=3, sticky="w", padx=(14, 0))
-        self.cb_base = ttk.Combobox(g2, values=("Light", "Dark"), state="readonly", width=6)
-        self.cb_base.set("Dark" if self.v_custom_base.get() == "dark" else "Light")
+        ttk.Button(g2, text=tr("Pick colour..."), command=self.pick_custom_color).grid(row=0, column=2, sticky="w")
+        ttk.Label(g2, text=tr("Base:")).grid(row=0, column=3, sticky="w", padx=(14, 0))
+        self.cb_base = ttk.Combobox(g2, values=(tr("Light"), tr("Dark")), state="readonly", width=6)
+        self.cb_base.set(tr("Dark") if self.v_custom_base.get() == "dark" else tr("Light"))
         self.cb_base.bind("<<ComboboxSelected>>", lambda e: self.set_custom_base(self.cb_base.get()))
         self.cb_base.grid(row=0, column=4, sticky="w", padx=(8, 0))
         ttk.Label(g2, style="Hint.TLabel", wraplength=400, justify="left",
-                  text="Pick any colour for the Start button, the sliders, headings and highlights. Base sets the "
-                       "window colours: light grey or dark.").grid(row=1, column=0, columnspan=5, sticky="w",
+                  text=tr("Pick any colour for the Start button, the sliders, headings and highlights. Base sets the "
+                          "window colours: light grey or dark.")).grid(row=1, column=0, columnspan=5, sticky="w",
                                                                    pady=(6, 0))
         self.update_tiles()
 
     @staticmethod
     def theme_name(key):
-        return {"system": "Match Windows", "custom": "Custom"}.get(key) or THEMES[key]["name"]
+        return tr({"system": "Match Windows", "custom": "Custom"}.get(key) or THEMES[key]["name"])
 
     def update_tiles(self):
         """Redraw Settings > Appearance: the tiles in the colours in use, the chosen one marked, the swatch."""
@@ -2587,7 +2745,7 @@ class App:
                 preview = custom if key == "custom" else THEMES.get(key, THEMES["classic"])
                 tile.update_look(self.theme, preview, key == chosen)
                 self.tile_labels[key].configure(style="Bold.TLabel" if key == chosen else "TLabel")
-            self.cb_base.set("Dark" if self.v_custom_base.get() == "dark" else "Light")
+            self.cb_base.set(tr("Dark") if self.v_custom_base.get() == "dark" else tr("Light"))
             sw = self.swatch
             sw.delete("all")
             sw.configure(bg=self.theme["face"])
@@ -2601,34 +2759,66 @@ class App:
         self.on_theme_change()
 
     def pick_custom_color(self):
-        res = colorchooser.askcolor(color=self.v_custom_accent.get(), title="%s - Custom colour" % APP_TITLE,
+        res = colorchooser.askcolor(color=self.v_custom_accent.get(), title=tr("%s - Custom colour") % APP_TITLE,
                                     parent=self.settings_win or self.root)
         if res and res[1] and HEX_COLOR.match(res[1]):
             self.v_custom_accent.set(res[1].upper())
             self.pick_theme("custom")
 
     def set_custom_base(self, label):
-        self.v_custom_base.set("dark" if label == "Dark" else "light")
+        self.v_custom_base.set("dark" if label == tr("Dark") else "light")
         self.pick_theme("custom")
 
+    @staticmethod
+    def ui_language_name(code):
+        """What the Settings > Language menu shows for a ui_language setting ("" = match Windows)."""
+        return dict(UI_LANGUAGES).get(code) or tr("Match Windows")
+
+    def on_ui_language_change(self, _event=None):
+        """A new language for RTTS's text: it applies when RTTS starts, so offer to restart now."""
+        name = self.cb_ui_lang.get()
+        code = next((c for c, n in UI_LANGUAGES if n == name), "")
+        if code == self.ui_language_setting:
+            return
+        if not messagebox.askyesno(APP_TITLE, tr("RTTS restarts to change its language. Restart now?"),
+                                   parent=self.settings_win or self.root):
+            self.cb_ui_lang.set(self.ui_language_name(self.ui_language_setting))
+            return
+        self.ui_language_setting = code
+        self.save_ui_prefs()
+        self.restart_app()
+
+    def restart_app(self):
+        """Start a new RTTS, then close this one (the new one waits for nothing: settings are already saved)."""
+        args = [sys.executable] if FROZEN else [sys.executable, str(Path(__file__).resolve())]
+        try:
+            subprocess.Popen(args, cwd=str(APP_DIR), close_fds=True,
+                             creationflags=getattr(subprocess, "DETACHED_PROCESS", 0)
+                             | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+        except Exception as e:
+            log_error(traceback.format_exc())
+            messagebox.showerror(APP_TITLE, tr("Couldn't restart RTTS. Close it and open it again.\n\n%s") % e)
+            return
+        self.on_close()
+
     def build_keybinds_tab(self, tab):
-        g = ttk.LabelFrame(tab, text="Start / Stop", padding=(10, 6))
+        g = ttk.LabelFrame(tab, text=tr("Start / Stop"), padding=(10, 6))
         g.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         tab.columnconfigure(0, weight=1)
         self.bind_btns = {}
         self.v_bind = {}
-        for row, (which, label) in enumerate((("start", "Start RTTS:"), ("stop", "Stop RTTS:"))):
+        for row, (which, label) in enumerate((("start", tr("Start RTTS:")), ("stop", tr("Stop RTTS:")))):
             ttk.Label(g, text=label).grid(row=row, column=0, sticky="w", pady=2)
             v = self.v_bind[which] = tk.StringVar(value=key_display(self.hotkeys[which]))
             ttk.Label(g, textvariable=v, width=16).grid(row=row, column=1, sticky="w", padx=(8, 8))
-            b = self.bind_btns[which] = ttk.Button(g, text="Change...", command=lambda x=which: self.begin_bind(x))
+            b = self.bind_btns[which] = ttk.Button(g, text=tr("Change..."), command=lambda x=which: self.begin_bind(x))
             b.grid(row=row, column=2, pady=2)
         ttk.Label(g, wraplength=380, justify="left", style="Hint.TLabel",
-                  text="Click Change, then press the key you want (Esc cancels). These keys work in every "
-                       "program, even while RTTS is in the background, and the program you're in still "
-                       "gets the key too.").grid(row=2, column=0, columnspan=3, sticky="w", pady=(6, 0))
+                  text=tr("Click Change, then press the key you want (Esc cancels). These keys work in every "
+                          "program, even while RTTS is in the background, and the program you're in still "
+                          "gets the key too.")).grid(row=2, column=0, columnspan=3, sticky="w", pady=(6, 0))
         ttk.Label(tab, wraplength=400, justify="left",
-                  text="The chat key is set in the main window, under Chat Options.").grid(
+                  text=tr("The chat key is set in the main window, under Chat Options.")).grid(
             row=1, column=0, sticky="w", pady=(0, 6))
 
     def begin_bind(self, which):
@@ -2638,14 +2828,14 @@ class App:
             return
         self.binding = which
         for w, b in self.bind_btns.items():
-            b.configure(text="Press a key..." if w == which else "Change...")
+            b.configure(text=tr("Press a key...") if w == which else tr("Change..."))
         self.settings_win.focus_set()      # so the key you press doesn't also work a button in this window
 
     def end_bind(self):
         self.binding = None
         for b in self.bind_btns.values():
             try:
-                b.configure(text="Change...")
+                b.configure(text=tr("Change..."))
             except tk.TclError:            # the Settings window is already gone
                 pass
 
@@ -2661,25 +2851,25 @@ class App:
         if name is None:
             messagebox.showwarning(
                 APP_TITLE,
-                "%s can't be used as a Start / Stop key.\n\nThese keys work in every program, so a key you "
-                "type, move or edit chat with would keep starting or stopping RTTS.\n\n"
-                "Pick a key like F1-F12, Insert or Pause." % shown, parent=win)
+                tr("%s can't be used as a Start / Stop key.\n\nThese keys work in every program, so a key you "
+                   "type, move or edit chat with would keep starting or stopping RTTS.\n\n"
+                   "Pick a key like F1-F12, Insert or Pause.") % shown, parent=win)
             return
         if key == self.hotkeys[which]:
             return
         if key == self.hotkeys[other]:
-            messagebox.showwarning(APP_TITLE, "%s is already your %s key." % (shown, other.capitalize()), parent=win)
+            messagebox.showwarning(APP_TITLE, tr("%s is already your %s key.") % (shown, tr(other.capitalize())), parent=win)
             return
         if self.snap["keyspec"] == ("key", key):
             messagebox.showwarning(
-                APP_TITLE, "%s is your chat key. Pick another key, or change the chat key first." % shown, parent=win)
+                APP_TITLE, tr("%s is your chat key. Pick another key, or change the chat key first.") % shown, parent=win)
             return
         if name in ROBLOX_KEYS:
             if not messagebox.askyesno(
                     APP_TITLE,
-                    "This keybind is already in use.\n\n%s is a Roblox key (it %s), and Roblox still gets the key "
-                    "when you press it.\n\nAre you sure you want to use it? (Not recommended)"
-                    % (shown, ROBLOX_KEYS[name]), icon="warning", default="no", parent=win):
+                    tr("This keybind is already in use.\n\n%s is a Roblox key (it %s), and Roblox still gets the key "
+                       "when you press it.\n\nAre you sure you want to use it? (Not recommended)")
+                    % (shown, tr(ROBLOX_KEYS[name])), icon="warning", default="no", parent=win):
                 return
         self.hotkeys[which] = key
         self.v_bind[which].set(shown)
@@ -2689,8 +2879,8 @@ class App:
         self.refresh_ready_status()
 
     def update_hotkey_labels(self):
-        self.btn_start.configure(text="Start (%s)" % key_display(self.hotkeys["start"]))
-        self.btn_stop.configure(text="Stop (%s)" % key_display(self.hotkeys["stop"]))
+        self.btn_start.configure(text=tr("Start (%s)") % key_display(self.hotkeys["start"]))
+        self.btn_stop.configure(text=tr("Stop (%s)") % key_display(self.hotkeys["stop"]))
 
     def close_settings(self):
         self.end_bind()
@@ -2713,7 +2903,7 @@ class App:
         parent = self.root
         win = tk.Toplevel(parent)
         win.withdraw()
-        win.title("%s - Large model" % APP_TITLE)
+        win.title(tr("%s - Large model") % APP_TITLE)
         win.resizable(False, False)
         win.transient(parent)
         self.apply_icon(win)
@@ -2727,19 +2917,19 @@ class App:
         f = ttk.Frame(win, padding=(18, 14, 18, 14))
         f.grid(row=0, column=0, sticky="nsew")
         f.columnconfigure(1, weight=1)
-        ttk.Label(f, text="%s  %s is a large model (%s)" % (LARGE_MARK, entry["name"], entry["params"]),
+        ttk.Label(f, text=tr("%s  %s is a large model (%s)") % (LARGE_MARK, entry["name"], tr(entry["params"])),
                   style="Title.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
-        ttk.Label(f, text="Are you sure you want to use this model?", style="Bold.TLabel").grid(
+        ttk.Label(f, text=tr("Are you sure you want to use this model?"), style="Bold.TLabel").grid(
             row=1, column=0, columnspan=2, sticky="w", pady=(10, 0))
         ttk.Label(f, wraplength=430, justify="left",
-                  text="Models like this need a lot of computing power: a strong graphics card (GPU) with plenty "
-                       "of video memory. They are slow on lower-end devices, and can lower your FPS in Roblox "
-                       "while they speak.").grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
+                  text=tr("Models like this need a lot of computing power: a strong graphics card (GPU) with plenty "
+                          "of video memory. They are slow on lower-end devices, and can lower your FPS in "
+                          "Roblox while they speak.")).grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
         ttk.Label(f, wraplength=430, justify="left",
-                  text="It is also a large file: %s to download." % size_text(download / 1e6)).grid(
+                  text=tr("It is also a large file: %s to download.") % size_text(download / 1e6)).grid(
             row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
         ttk.Separator(f).grid(row=4, column=0, columnspan=2, sticky="ew", pady=(12, 8))
-        ttk.Label(f, text="Your PC", style="Hint.TLabel").grid(row=5, column=0, columnspan=2, sticky="w",
+        ttk.Label(f, text=tr("Your PC"), style="Hint.TLabel").grid(row=5, column=0, columnspan=2, sticky="w",
                                                                 pady=(0, 4))
         symbols = {"ok": "✔", "warn": "⚠", "bad": "✖"}
         styles = {"ok": "Good", "warn": "Warn", "bad": "Bad"}
@@ -2754,10 +2944,10 @@ class App:
 
         bf = ttk.Frame(f)
         bf.grid(row=row, column=0, columnspan=2, sticky="e", pady=(10, 0))
-        go = ttk.Button(bf, text="Use anyway (not recommended)" if warned else "Download and use",
+        go = ttk.Button(bf, text=tr("Use anyway (not recommended)") if warned else tr("Download and use"),
                         command=lambda: finish(True))
         go.pack(side="left")
-        cancel = ttk.Button(bf, text="Cancel", command=lambda: finish(False))
+        cancel = ttk.Button(bf, text=tr("Cancel"), command=lambda: finish(False))
         cancel.pack(side="left", padx=(8, 0))
         if not can:
             go.configure(state="disabled")
@@ -2790,10 +2980,10 @@ class App:
         if self.v_slash.get():
             ok = messagebox.askokcancel(
                 APP_TITLE,
-                'Experimental feature\n\n'
-                'This only works if Roblox types a "/" into the chat box when you press "/". '
-                'Many versions do not. If yours does not, NONE of your messages will be spoken.\n\n'
-                'You can turn it off again here at any time.\n\nTurn it on?',
+                tr('Experimental feature\n\n'
+                   'This only works if Roblox types a "/" into the chat box when you press "/". '
+                   'Many versions do not. If yours does not, NONE of your messages will be spoken.\n\n'
+                   'You can turn it off again here at any time.\n\nTurn it on?'),
                 icon="warning", parent=self.settings_win or self.root)
             if not ok:
                 self.v_slash.set(False)
@@ -2823,6 +3013,7 @@ class App:
         data["theme"] = self.v_theme.get()
         data["custom_accent"] = self.v_custom_accent.get()
         data["custom_base"] = self.v_custom_base.get()
+        data["ui_language"] = self.ui_language_setting
         data["topmost"] = bool(self.v_top.get())
         data["slash_typed"] = bool(self.v_slash.get())
         data["skip_emojis"] = bool(self.v_emoji.get())
@@ -2835,7 +3026,7 @@ class App:
             with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
         except Exception as e:
-            self.set_status("Couldn't save look settings: %s" % e)
+            self.set_status(tr("Couldn't save look settings: %s") % e)
 
     def on_slider(self, *_):
         self.v_speed_txt.set("%d%%" % round(self.v_speed.get()))
@@ -2863,8 +3054,8 @@ class App:
 
     def ready_text(self):
         if not self.running:
-            return "Stopped"
-        return "Running - press %s in Roblox to chat" % self.v_key.get().strip()
+            return tr("Stopped")
+        return tr("Running - press %s in Roblox to chat") % self.v_key.get().strip()
 
     def refresh_ready_status(self):
         if self.loading or (self.engine is None and not self.engine_ready.is_set()):
@@ -2914,6 +3105,7 @@ class App:
     def fill_voice_list(self, pairs, prefer=None):
         """pairs: [(voice_id, label)]. Keeps the chosen voice if the list has it, else picks the first."""
         want = prefer if prefer is not None else self.voice_id()
+        pairs = [(vid, voice_display(label)) for vid, label in pairs]
         self.voice_map = {label: vid for vid, label in pairs}
         self.cb_voice["values"] = [label for _vid, label in pairs]
         ids = [vid for vid, _label in pairs]
@@ -2931,13 +3123,13 @@ class App:
         """The two grey lines under the model menu: what it is, size, parameters, state."""
         e = self.current_entry()
         mb = entry_mb(e)
-        facts = [(size_text(mb) + (" per voice" if e["kind"] == "piper" else "")) if mb else "built in"]
+        facts = [(size_text(mb) + (tr(" per voice") if e["kind"] == "piper" else "")) if mb else tr("built in")]
         if e.get("params"):
-            facts.append(e["params"])
+            facts.append(tr(e["params"]))
         files = entry_files(e, self.voice_id())
         if files:
-            facts.append("downloaded" if files_ready(files) else "not downloaded yet")
-        self.v_info.set("%s\n%s" % (e["note"], " \u00b7 ".join(facts)))
+            facts.append(tr("downloaded") if files_ready(files) else tr("not downloaded yet"))
+        self.v_info.set("%s\n%s" % (tr(e["note"]), " \u00b7 ".join(facts)))
 
     @staticmethod
     def needs_large_confirm(entry):
@@ -2952,7 +3144,7 @@ class App:
         if not self.confirm_large_model(entry):
             entry = CATALOG_BY_ID[DEFAULT_MODEL]
             self.v_model.set(model_label(entry))
-            self.fill_voice_list(catalog_voices(entry), prefer=DEFAULT_VOICE)
+            self.fill_voice_list(catalog_voices(entry, self.language()), prefer=DEFAULT_VOICE)
         self.chosen_entry = entry
         self.update_info()
         self.start_engine_load(entry, self.voice_id())
@@ -2964,7 +3156,53 @@ class App:
                 self.v_model.set(model_label(self.chosen_entry))
                 return
         self.chosen_entry = entry
-        self.fill_voice_list(catalog_voices(entry))
+        self.fill_voice_list(catalog_voices(entry, self.language()))
+        self.update_info()
+        self.request_engine()
+
+    # ---------------- voice language ----------------
+    def language(self):
+        """The code of the language picked under Voice > Language."""
+        name = self.v_lang.get()
+        return next((code for code, n in LANGUAGES if n == name), DEFAULT_LANGUAGE)
+
+    def show_language(self, lang, prefer_voice=None):
+        """Offer only the models and voices that speak `lang`; switch model if the current one can't.
+
+        Doesn't load anything (callers do). Returns the entry that is now picked."""
+        self.v_lang.set(LANGUAGE_NAMES.get(lang, LANGUAGE_NAMES[DEFAULT_LANGUAGE]))
+        models = models_for(lang)
+        self.cb_model["values"] = [model_label(e) for e in models]
+        entry = self.current_entry()
+        if entry not in models:
+            # the closest kind of model that speaks it: Kokoro if it can, else Piper Medium, else eSpeak
+            entry = next((CATALOG_BY_ID[i] for i in ("kokoro-best", "kokoro-fast", "piper-medium", "piper-high",
+                                                      "piper-low", "espeak") if CATALOG_BY_ID[i] in models),
+                         models[0])
+            self.v_model.set(model_label(entry))
+        self.chosen_entry = entry
+        self.fill_voice_list(catalog_voices(entry, lang), prefer=prefer_voice)
+        self.update_lang_note()
+        return entry
+
+    def update_lang_note(self):
+        """Tell the user which models can't speak the picked language (and how to type it, where that matters)."""
+        lang = self.language()
+        lines = []
+        missing = [e["name"] for e in CATALOG if e not in models_for(lang)]
+        if missing:
+            lines.append(tr("Not every voice speaks this language. Not available in it: %s.") % ", ".join(missing))
+        tip = LANGUAGE_TIPS.get(lang)
+        if tip:
+            lines.append(tr(tip))
+        self.v_lang_note.set("\n".join(lines))
+        if lines:
+            self.lbl_lang_note.grid()
+        else:
+            self.lbl_lang_note.grid_remove()
+
+    def on_language_change(self, _event=None):
+        self.show_language(self.language())
         self.update_info()
         self.request_engine()
 
@@ -2982,7 +3220,7 @@ class App:
             self.out_devices, self.default_out = list_outputs()
         except Exception as e:
             self.out_devices, self.default_out = [], None
-            self.set_status("Couldn't list audio devices: %s" % e)
+            self.set_status(tr("Couldn't list audio devices: %s") % e)
         names = [n for _, n in self.out_devices]
         self.cb_out["values"] = names
         idx = find_index(names, preferred)
@@ -2995,8 +3233,8 @@ class App:
         else:
             self.v_output.set("")
         if find_index(names, "CABLE") < 0:
-            self.set_status("VB-Cable not found - install it, restart, then press Refresh devices"
-                            if self.running else "Stopped - VB-Cable not found (see Get VB-Cable)")
+            self.set_status(tr("VB-Cable not found - install it, restart, then press Refresh devices")
+                            if self.running else tr("Stopped - VB-Cable not found (see Get VB-Cable)"))
 
     def refresh_devices(self):
         keep = self.v_output.get()
@@ -3027,10 +3265,10 @@ class App:
         if spec is None or taken:
             messagebox.showwarning(
                 APP_TITLE,
-                ("%s is your Start / Stop key, so it can't open chat too. Pick another chat key, or change "
-                 "the Start / Stop keys in Settings > Keybinds." % key_display(spec[1])) if taken else
-                ("That isn't a key I recognise: %r\n\nUse a single character (like /) or a key name "
-                 "such as tab, enter or f2." % self.v_key.get()))
+                (tr("%s is your Start / Stop key, so it can't open chat too. Pick another chat key, or change "
+                    "the Start / Stop keys in Settings > Keybinds.") % key_display(spec[1])) if taken else
+                (tr("That isn't a key I recognise: %r\n\nUse a single character (like /) or a key name "
+                    "such as tab, enter or f2.") % self.v_key.get()))
             prev = self.snap["keyspec"]
             self.v_key.set(prev[1] if prev[0] == "char" else getattr(prev[1], "name", "/"))
             return False
@@ -3049,6 +3287,7 @@ class App:
             spec = self.snap["keyspec"]
         self.snap = {"keyspec": spec, "only": bool(self.v_only.get()),
                      "slash": bool(self.v_slash.get()),
+                     "chat_scan": US_SCAN_CODES.get(spec[1].lower()) if spec[0] == "char" else None,
                      "start": self.hotkeys["start"], "stop": self.hotkeys["stop"]}
 
     # ---------------- settings ----------------
@@ -3066,9 +3305,9 @@ class App:
     def apply_settings(self, d):
         mid = LEGACY_MODELS.get(d.get("model"), d.get("model"))
         entry = CATALOG_BY_ID.get(mid) or CATALOG_BY_ID[DEFAULT_MODEL]
-        self.chosen_entry = entry
+        lang = d.get("language") if d.get("language") in LANGUAGE_NAMES else DEFAULT_LANGUAGE
         self.v_model.set(model_label(entry))
-        self.fill_voice_list(catalog_voices(entry), prefer=str(d.get("voice") or ""))
+        self.show_language(lang, prefer_voice=str(d.get("voice") or ""))   # may swap a model that can't speak it
         self.v_speed.set(min(160, max(60, self._int(d.get("speed"), 100))))
         self.v_volume.set(min(100, max(0, self._int(d.get("volume"), 100))))
         self.hotkeys = self.load_hotkeys(d)
@@ -3088,6 +3327,8 @@ class App:
         accent = str(d.get("custom_accent") or "")
         self.v_custom_accent.set(accent.upper() if HEX_COLOR.match(accent) else DEFAULTS["custom_accent"])
         self.v_custom_base.set("dark" if d.get("custom_base") == "dark" else "light")
+        ui = d.get("ui_language")
+        self.ui_language_setting = ui if ui in {c for c, _n in UI_LANGUAGES} else ""
         self.v_top.set(bool(d.get("topmost", False)))
         self.apply_theme()
         self.apply_topmost()
@@ -3118,6 +3359,8 @@ class App:
         d = {
             "voice": self.voice_id(),
             "model": self.current_entry()["id"],
+            "language": self.language(),
+            "ui_language": self.ui_language_setting,
             "output": self.v_output.get(),
             "speed": round(self.v_speed.get()),
             "volume": round(self.v_volume.get()),
@@ -3140,14 +3383,16 @@ class App:
             DATA_DIR.mkdir(parents=True, exist_ok=True)
             with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
                 json.dump(d, f, indent=2)
-            self.set_status("Settings saved")
+            self.set_status(tr("Settings saved"))
         except Exception as e:
-            messagebox.showwarning(APP_TITLE, "Couldn't save settings.\n\n%s" % e)
+            messagebox.showwarning(APP_TITLE, tr("Couldn't save settings.\n\n%s") % e)
 
     def reset_settings(self):
         keep_model = self.current_entry()["id"]
         d = dict(DEFAULTS)
         d["model"] = keep_model          # don't trigger a re-download/reload on reset
+        d["language"] = self.language()  # nor switch the voice to another language
+        d["ui_language"] = self.ui_language_setting
         d["theme"] = self.v_theme.get()  # looks are chosen in Settings, not reset here
         d["custom_accent"] = self.v_custom_accent.get()
         d["custom_base"] = self.v_custom_base.get()
@@ -3158,7 +3403,7 @@ class App:
         d["stop_key"] = self.hotkeys["stop"].name
         self.apply_settings(d)
         self.request_engine()                      # the default voice may need another Piper file
-        self.set_status("Settings reset")
+        self.set_status(tr("Settings reset"))
 
     # ---------------- engine loading ----------------
     def request_engine(self):
@@ -3182,7 +3427,7 @@ class App:
         self.set_progress(0)
         self.set_speed("")
         self.show_progress_row(False)
-        self.set_status("Loading %s ..." % entry["name"])
+        self.set_status(tr("Loading %s ...") % entry["name"])
         threading.Thread(target=self._load_engine, args=(entry, voice, gen), daemon=True).start()
 
     def _load_engine(self, entry, voice, gen):
@@ -3228,16 +3473,18 @@ class App:
         self.fill_voice_list(self.menu_voices())           # e.g. Kokoro: only voices the file really has
         self.update_info()
         if find_index([n for _, n in self.out_devices], "CABLE") < 0:
-            self.set_status("Voice engine ready - VB-Cable not found (see Get VB-Cable)")
+            self.set_status(tr("Voice engine ready - VB-Cable not found (see Get VB-Cable)"))
         else:
             self.set_status(self.ready_text() if self.running else
-                            "Voice engine ready - press Start (%s)" % key_display(self.hotkeys["start"]))
+                            tr("Voice engine ready - press Start (%s)") % key_display(self.hotkeys["start"]))
 
     def menu_voices(self):
         """Voices to offer for the loaded engine. A Piper engine holds just one voice, so offer the model's full list."""
+        lang = self.language()
         if self.loaded_entry["kind"] == "piper":
-            return catalog_voices(self.loaded_entry)
-        return self.engine.voice_list()
+            return catalog_voices(self.loaded_entry, lang)
+        got = [p for p in self.engine.voice_list() if voice_language(self.loaded_entry, p[0]) == lang]
+        return got or catalog_voices(self.loaded_entry, lang)
 
     def on_engine_failed(self, err, gen):
         if gen != self.load_gen:
@@ -3252,17 +3499,17 @@ class App:
             self.v_model.set(model_label(self.loaded_entry))
             self.fill_voice_list(self.menu_voices(), prefer=self.loaded_voice)
             self.update_info()
-            self.set_status("Couldn't load that model: %s" % err)
+            self.set_status(tr("Couldn't load that model: %s") % err)
             return
         self.cancel_speech()               # don't speak messages queued for the load that failed later on
-        self.set_status("Voice engine failed to load: %s" % err)
+        self.set_status(tr("Voice engine failed to load: %s") % err)
         files = entry_files(self.current_entry(), self.voice_id())
         hint = ""
         if files:
-            hint = ("\n\nIf it was a download problem, download these files in your browser and put them in:\n"
-                    "%s\n\n%s" % (MODEL_DIR, "\n".join(r.url for r in files)))
+            hint = ("\n\n" + tr("If it was a download problem, download these files in your browser and put them "
+                                "in:") + "\n%s\n\n%s" % (MODEL_DIR, "\n".join(r.url for r in files)))
         messagebox.showerror(
-            APP_TITLE, "The voice engine couldn't start.\n\n%s%s\n\nDetails are in %s" % (err, hint, ERROR_LOG))
+            APP_TITLE, tr("The voice engine couldn't start.\n\n%s%s\n\nDetails are in %s") % (err, hint, ERROR_LOG))
 
     # ---------------- speaking ----------------
     def say(self, text, purge=None):
@@ -3275,7 +3522,7 @@ class App:
         if not text:
             return
         if self.engine is None and not self.loading:
-            self.set_status("No voice engine is loaded - pick a model to try again")
+            self.set_status(tr("No voice engine is loaded - pick a model to try again"))
             return
         if purge:
             self.cancel_speech()
@@ -3289,7 +3536,7 @@ class App:
             "gen": self.gen,
         }
         if not job["devices"]:
-            self.set_status("No audio output device selected")
+            self.set_status(tr("No audio output device selected"))
             return
         self.jobs.put(job)
 
@@ -3314,7 +3561,7 @@ class App:
                 self.run_job(job)
             except Exception as e:
                 log_error(traceback.format_exc())
-                self.post(self.set_status, "Speech error: %s" % e)
+                self.post(self.set_status, tr("Speech error: %s") % e)
 
     def run_job(self, job):
         if job["gen"] != self.gen:
@@ -3334,7 +3581,7 @@ class App:
                 return
             audio, sr = engine.speak(job["text"], voice, job["speed"])
         except ValueError as e:
-            self.post(self.set_status, "Nothing speakable in that message")
+            self.post(self.set_status, tr("Nothing speakable in that message"))
             log_error("create() rejected %r: %s" % (job["text"], e))
             self.post(self.refresh_ready_status)
             return
@@ -3347,7 +3594,7 @@ class App:
             audio,
             np.zeros(int(sr * TAIL_SILENCE), dtype=np.float32),
         ])
-        self.post(self.set_status, "Speaking...")
+        self.post(self.set_status, tr("Speaking..."))
         self.play(audio, sr, job["devices"], job["gen"])
         if self.jobs.empty():
             self.post(self.refresh_ready_status)
@@ -3399,7 +3646,7 @@ class App:
                         for p in held:
                             send(p)
                         held, started = [], True
-                        self.post(self.set_status, "Speaking...")
+                        self.post(self.set_status, tr("Speaking..."))
             if cancelled():
                 return
             if not started:                                            # short message: all made before the start
@@ -3408,7 +3655,7 @@ class App:
                 for p in held:
                     send(p)
                 started = True
-                self.post(self.set_status, "Speaking...")
+                self.post(self.set_status, tr("Speaking..."))
             send(np.zeros(int(sr * TAIL_SILENCE), dtype=np.float32))
         finally:
             send(None)                                                 # tells each player there is no more
@@ -3449,7 +3696,7 @@ class App:
                 stream.close()
         except Exception as e:
             log_error("Audio error on device %s:\n%s" % (device, traceback.format_exc()))
-            self.post(self.set_status, "Audio error: %s" % e)
+            self.post(self.set_status, tr("Audio error: %s") % e)
         finally:
             with self.audio_lock:
                 self._streams = max(0, self._streams - 1)
@@ -3494,7 +3741,7 @@ class App:
                 stream.close()
         except Exception as e:
             log_error("Audio error on device %s:\n%s" % (device, traceback.format_exc()))
-            self.post(self.set_status, "Audio error: %s" % e)
+            self.post(self.set_status, tr("Audio error: %s") % e)
         finally:
             with self.audio_lock:
                 self._streams = max(0, self._streams - 1)
@@ -3506,7 +3753,7 @@ class App:
         self.running = True
         self.report_voice()
         if self.engine is None and not self.engine_ready.is_set():
-            self.set_status("Running - voice engine is still loading, messages will be spoken once it's ready")
+            self.set_status(tr("Running - voice engine is still loading, messages will be spoken once it's ready"))
         else:
             self.set_status(self.ready_text())
 
@@ -3524,7 +3771,7 @@ class App:
         self.running = False
         self.cancel_capture()
         self.cancel_speech()
-        self.set_status(self.ready_text() if self.engine_ready.is_set() else "Stopped")
+        self.set_status(self.ready_text() if self.engine_ready.is_set() else tr("Stopped"))
 
     # ---------------- chat capture (runs on the keyboard listener thread) ----------------
     def on_key_press(self, key, *_):
@@ -3564,14 +3811,20 @@ class App:
                 self.cap_buf = ["/"] if (self.snap["slash"] and kind == "char" and val == "/") else []
                 self.cap_pos = len(self.cap_buf)
                 self.cap_started = time.time()
-                self.post(self.set_status, "Listening to your chat message...")
+                self.post(self.set_status, tr("Listening to your chat message..."))
 
     def _is_chat_key(self, key):
         kind, val = self.snap["keyspec"]
         if kind == "key":
             return key == val
         ch = getattr(key, "char", None)
-        return bool(ch) and not getattr(key, "is_dead", False) and ch.lower() == val.lower()
+        if ch and not getattr(key, "is_dead", False) and ch.lower() == val.lower():
+            return True
+        # With a non-Latin keyboard (Russian, Arabic, Hindi ...) the chat key's spot types another character: the
+        # "/" key types "." on a Russian keyboard. Roblox still opens chat with that key, so match where it is.
+        # Latin layouts (German, French ...) keep matching the character only, as before.
+        scan = self.snap.get("chat_scan")
+        return bool(scan) and self.non_latin_layout and getattr(key, "_scan", None) == scan
 
     def _capture_key(self, key):
         # caller holds cap_lock
@@ -3593,7 +3846,7 @@ class App:
         # message rather than speak something different from what ends up in the chat box.
         if key in (K.up, K.down, K.page_up, K.page_down) or (
                 shift and key in (K.left, K.right, K.home, K.end)):
-            self._end_capture_locked(None, "Message cancelled (cursor/selection keys aren't supported)")
+            self._end_capture_locked(None, tr("Message cancelled (cursor/selection keys aren't supported)"))
             return
 
         if key == K.left:
@@ -3722,9 +3975,41 @@ class App:
                         self._end_capture_locked(None)
                     elif self.snap["only"] and not roblox_active():
                         self._end_capture_locked(None)
+            self.follow_keyboard_layout()
         except Exception:
             log_error(traceback.format_exc())
         self.root.after(250, self.tick)
+
+    def follow_keyboard_layout(self):
+        """Keep the key listener's letters in step with the keyboard layout of the window in front.
+
+        pynput works out which letter a key types from a table it builds for one layout: the layout of the
+        thread that builds it, never the window in front. Without this, Russian / Arabic / Hindi typing would be
+        read as English letters. The table is rebuilt here, on the Tk thread (building it must not happen inside
+        the keyboard hook), for the layout of the window in front."""
+        if not IS_WIN:
+            return
+        hwnd = _user32.GetForegroundWindow()
+        if not hwnd:
+            return
+        pid = wintypes.DWORD()
+        thread = _user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        layout = _user32.GetKeyboardLayout(thread)
+        if not layout or layout == self.last_layout:
+            return
+        self.last_layout = layout
+        self.non_latin_layout = (layout & 0x3FF) in NON_LATIN_LANGUAGE_IDS     # low word = the language id
+        translator = getattr(self.kb_listener, "_translator", None)
+        if translator is None or not hasattr(translator, "_thread_input"):
+            return
+
+        @contextlib.contextmanager
+        def front_thread():                        # pynput asks this for the thread whose layout to use
+            h = _user32.GetForegroundWindow()
+            yield _user32.GetWindowThreadProcessId(h, ctypes.byref(wintypes.DWORD())) if h else thread
+
+        translator._thread_input = front_thread
+        translator.update_layout()                 # a few ms: ~2000 ToUnicodeEx calls
 
     # ---------------- recent messages ----------------
     def add_recent(self, text):
@@ -3761,21 +4046,21 @@ class App:
         parent = self.settings_win if manual and self.settings_win is not None else self.root
         if err is not None:
             if manual:
-                messagebox.showwarning(APP_TITLE, "Couldn't check for updates.\n\n%s" % err, parent=parent)
+                messagebox.showwarning(APP_TITLE, tr("Couldn't check for updates.\n\n%s") % err, parent=parent)
             return
         if rel is None or version_tuple(rel["version"]) <= version_tuple(APP_VERSION):
             if manual:
-                messagebox.showinfo(APP_TITLE, "You have the latest version (RTTS %s)." % APP_VERSION, parent=parent)
+                messagebox.showinfo(APP_TITLE, tr("You have the latest version (RTTS %s).") % APP_VERSION, parent=parent)
             return
         if self.v_auto.get() and not manual and FROZEN and rel["asset"]:
             self.install_update(rel)
             return
         if messagebox.askyesno(
-                "%s update" % APP_TITLE,
-                "RTTS %s is out. You have %s.\n\nDo you want to update now?\n\n"
-                "Yes (recommended): updates keep RTTS stable and fix bugs. RTTS closes, updates, "
-                "and opens again, and your voices and settings are kept.\n\n"
-                "No: keep using this version. RTTS asks again next time it starts."
+                tr("%s update") % APP_TITLE,
+                tr("RTTS %s is out. You have %s.\n\nDo you want to update now?\n\n"
+                   "Yes (recommended): updates keep RTTS stable and fix bugs. RTTS closes, updates, "
+                   "and opens again, and your voices and settings are kept.\n\n"
+                   "No: keep using this version. RTTS asks again next time it starts.")
                 % (rel["version"], APP_VERSION), icon="question", parent=parent):
             self.install_update(rel)
 
@@ -3787,7 +4072,7 @@ class App:
         self.update_busy = True
         name, url, size, sha = rel["asset"]
         win = tk.Toplevel(self.root)
-        win.title("Updating %s" % APP_TITLE)
+        win.title(tr("Updating %s") % APP_TITLE)
         win.resizable(False, False)
         win.transient(self.root)
         win.configure(bg=self.theme["face"])
@@ -3804,7 +4089,7 @@ class App:
         def cancel():
             cancelled[0] = True
 
-        ttk.Button(f, text="Cancel", command=cancel).grid(row=2, column=0, sticky="e")
+        ttk.Button(f, text=tr("Cancel"), command=cancel).grid(row=2, column=0, sticky="e")
         win.protocol("WM_DELETE_WINDOW", cancel)
         self.root.update_idletasks()
         win.geometry("+%d+%d" % (self.root.winfo_x() + 40, self.root.winfo_y() + 60))
@@ -3830,7 +4115,7 @@ class App:
                 pass
             if path is None:
                 if err is not None and messagebox.askyesno(
-                        APP_TITLE, "Couldn't download the update.\n\n%s\n\nOpen the download page on GitHub instead?"
+                        APP_TITLE, tr("Couldn't download the update.\n\n%s\n\nOpen the download page on GitHub instead?")
                         % err, icon="warning"):
                     webbrowser.open(rel["url"])
                 return
@@ -3841,7 +4126,7 @@ class App:
                                  close_fds=True)
             except Exception as e:
                 log_error(traceback.format_exc())
-                messagebox.showerror(APP_TITLE, "Couldn't start the update.\n\n%s" % e)
+                messagebox.showerror(APP_TITLE, tr("Couldn't start the update.\n\n%s") % e)
                 return
             self.on_close()
 
@@ -3878,17 +4163,37 @@ class App:
         self.root.destroy()
 
 
+def saved_ui_language():
+    """RTTS's text language: the one picked in Settings, else Windows' own language if RTTS has it, else English."""
+    code = ""
+    try:
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            code = str(json.load(f).get("ui_language") or "")
+    except Exception:
+        pass
+    known = {c for c, _name in UI_LANGUAGES}
+    return code if code in known else windows_ui_language()
+
+
 def main():
-    global UI_FAMILY
+    global UI_FAMILY, FONT_SIZE
     if IS_WIN:
         try:
             ctypes.windll.shcore.SetProcessDpiAwareness(1)
         except Exception:
             pass
+    ui_lang = saved_ui_language()
+    set_ui_language(ui_lang)
     load_bundled_fonts()
     root = tk.Tk()
     try:
-        if UI_FAMILY not in tkfont.families(root):
+        families = set(tkfont.families(root))
+        if ui_lang in UI_FONTS:
+            # Space Mono only has Latin letters: these languages use a Windows font made for their script
+            family, size = UI_FONTS[ui_lang]
+            if family in families:
+                UI_FAMILY, FONT_SIZE = family, size
+        if UI_FAMILY not in families:
             UI_FAMILY = "Consolas"      # the bundled font is missing; Consolas comes with Windows
     except Exception:
         log_error(traceback.format_exc())
@@ -3896,7 +4201,7 @@ def main():
         App(root)
     except Exception:
         log_error(traceback.format_exc())
-        messagebox.showerror(APP_TITLE, "The app hit an error while starting.\n\nDetails are in:\n%s" % ERROR_LOG)
+        messagebox.showerror(APP_TITLE, tr("The app hit an error while starting.\n\nDetails are in:\n%s") % ERROR_LOG)
         raise SystemExit(1)
     root.mainloop()
 
