@@ -1545,16 +1545,17 @@ def build_engine(entry, voice, status, prog, cancelled, speed=None):
 #  Slider (drawn by hand so it looks the same in the light and the dark theme)
 # --------------------------------------------------------------------------
 class FlatSlider(tk.Canvas):
-    """Horizontal slider with the dark-theme look: a dark track and a grey handle with grip lines.
+    """Horizontal slider: a flat track and a grey handle with grip lines, coloured for the light or dark theme.
 
     Works like ttk.Scale for what RTTS needs: `variable` (a DoubleVar) holds the value, `command`
     is called after the user moves it. Values are whole numbers from `from_` to `to`."""
 
-    TROUGH = "#3c3c3c"
-    THUMB = "#8c8c8c"
-    THUMB_HOT = "#b0b0b0"
-    GRIP_DARK = "#5a5a5a"
-    GRIP_LIGHT = "#bdbdbd"
+    COLORS = {
+        "dark": dict(trough="#3c3c3c", border=DARK["border"], focus=DARK["accent"], thumb="#8c8c8c",
+                     thumb_hot="#b0b0b0", grip_dark="#5a5a5a", grip_light="#bdbdbd"),
+        "light": dict(trough="#e6e6e6", border="#c4c4c4", focus="#0078d7", thumb="#cdcdcd",
+                      thumb_hot="#b8b8b8", grip_dark="#8c8c8c", grip_light="#f4f4f4"),
+    }
 
     def __init__(self, master, from_, to, variable, command=None, width=100):
         k = max(1.0, master.winfo_fpixels("1i") / 96.0)      # follow Windows display scaling
@@ -1563,6 +1564,7 @@ class FlatSlider(tk.Canvas):
         super().__init__(master, width=width, height=int(round(18 * k)), highlightthickness=0, bd=0,
                          takefocus=True)
         self.lo, self.hi = float(from_), float(to)
+        self.c = self.COLORS["dark"]
         self.var = variable
         self.command = command
         self.hot = False                  # mouse is over the handle (or dragging it)
@@ -1662,9 +1664,11 @@ class FlatSlider(tk.Canvas):
         self._set(value)
         return "break"
 
-    def set_bg(self, color):
-        """Colour of the space around the track (the window's background, which changes with the theme)."""
+    def set_bg(self, color, dark=True):
+        """Follow the theme: `color` is the window background around the track, `dark` picks the track colours."""
+        self.c = self.COLORS["dark" if dark else "light"]
         self.configure(bg=color)
+        self.redraw()
 
     # ---- drawing ----
     def redraw(self):
@@ -1673,17 +1677,18 @@ class FlatSlider(tk.Canvas):
         h = self.winfo_height()
         if h <= 1:
             h = int(float(self.cget("height")))
-        self.create_rectangle(0, 0, w - 1, h - 1, fill=self.TROUGH,
-                              outline=DARK["accent"] if self.focused else DARK["border"])
+        c = self.c
+        self.create_rectangle(0, 0, w - 1, h - 1, fill=c["trough"],
+                              outline=c["focus"] if self.focused else c["border"])
         x0 = self._thumb_x()
         self.create_rectangle(x0, 0, x0 + self.thumb_w, h - 1,
-                              fill=self.THUMB_HOT if self.hot else self.THUMB, outline=DARK["border"])
+                              fill=c["thumb_hot"] if self.hot else c["thumb"], outline=c["border"])
         cx = x0 + self.thumb_w // 2
         top, bottom = int(round(h * 0.28)), h - 1 - int(round(h * 0.28))
         gap = max(3, int(round(4 * self.k)))
         for dx in (-gap, 0, gap):
-            self.create_line(cx + dx, top, cx + dx, bottom, fill=self.GRIP_DARK)
-            self.create_line(cx + dx + 1, top, cx + dx + 1, bottom, fill=self.GRIP_LIGHT)
+            self.create_line(cx + dx, top, cx + dx, bottom, fill=c["grip_dark"])
+            self.create_line(cx + dx + 1, top, cx + dx + 1, bottom, fill=c["grip_light"])
 
 
 # --------------------------------------------------------------------------
@@ -1953,7 +1958,7 @@ class App:
         bg = c["bg"] if c else self.light_bg
         self.root.configure(bg=bg)
         for s in self.sliders:
-            s.set_bg(bg)
+            s.set_bg(bg, dark)
         if self.settings_win is not None and self.settings_win.winfo_exists():
             self.settings_win.configure(bg=bg)
         tl = self.txt_light
