@@ -25,32 +25,15 @@ It plays the voice through a virtual microphone ([VB-Cable](https://vb-audio.com
 <p align="center"><img src="docs/images/screenshot.png" alt="The RTTS window" width="520"></p>
 -->
 
-RTTS was made using AI, and AI was heavily used to write the code. The app also uses AI voices to do the talking. The full source is right here if you want to see how it works.
+## AI use
 
-## Voice models
+**The code.** RTTS was made using AI, and AI was heavily used to write the code. The full source is right here if you want to see how it works.
 
-Pick a model from the menu in the app. Local models run on your own PC. Each one downloads the first time you pick it.
+**The voices.** RTTS uses AI voice models to do the talking. Kokoro, Piper and Orpheus are AI models, while eSpeak is a classic robotic voice that isn't AI.
 
-| Model | Download | What it's like |
-|---|---|---|
-| eSpeak | built in | Robotic, but instant and uses almost no CPU |
-| Piper Low / Medium / High | 63–121 MB per voice | Light neural voices, fast |
-| Kokoro Faster / Best | 121 / 354 MB | Very natural, runs well on almost any PC |
-| ⚡ Orpheus | 2.2 GB | The most realistic local voice. Needs a strong graphics card |
-| OpenAI (cloud) | none | Natural voices from OpenAI. Needs your own API key |
+**Your messages.** AI only turns your text into speech. It doesn't change, rewrite or reply to anything you type. RTTS says exactly what you wrote.
 
-### ⚡ Large models
-
-Models with 1 billion or more parameters have a ⚡ next to their name. Right now that's **Orpheus** (3 billion parameters, 8 voices: Tara, Leah, Jess, Mia, Zoe, Leo, Dan and Zac).
-
-Large models sound the most human, but they need a lot of computing power:
-
-- An NVIDIA graphics card with 8 GB of video memory or more is recommended. Orpheus uses about 2.5 GB of it while it's selected.
-- They're slow on lower-end PCs, and can lower your FPS in Roblox while they speak.
-- Orpheus starts speaking about half a second after you send a message, and keeps making the rest while it talks.
-- The speed slider has no effect on Orpheus.
-
-Before a large model downloads for the first time, RTTS asks if you're sure, and checks your PC's graphics card, memory (RAM) and free space. If your PC might struggle, it tells you, but you can still choose to use it. When you switch to another model or close RTTS, the memory Orpheus used is freed.
+**Where the AI runs.** Local models run on your own PC, so your messages never leave it. The optional OpenAI voices run in the cloud and send your text to OpenAI (see [Privacy](#privacy)).
 
 ## How to setup RTTS
 
