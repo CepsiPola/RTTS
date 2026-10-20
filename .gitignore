@@ -1,0 +1,13 @@
+# Voice models and llama.cpp download on first run (several GB, too big for GitHub)
+models/
+
+# Python
+__pycache__/
+*.pyc
+*.bak
+
+# Build output (build.bat / make_installer.bat)
+build/
+dist/
+installer_output/
+*.spec
