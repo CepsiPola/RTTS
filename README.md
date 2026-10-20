@@ -15,6 +15,7 @@
 
 - **100% local:** every voice runs on your PC. No account, no API key.
 - **Robotic to realistic:** 7 voice models, from tiny eSpeak to ⚡ Orpheus.
+- **9 languages:** English, Spanish, French, Portuguese (Brazil), German, Hindi, Russian, Arabic and Chinese, for both the voice and the app itself.
 - **Roblox hears it as your mic:** the voice plays through [VB-Cable](https://vb-audio.com/Cable/).
 - **Stays up to date:** checks for a new version every time it starts.
 - **Your colours:** a retro look with 7 colour themes, or pick your own in **Settings > Appearance**.
@@ -137,6 +138,20 @@ Most errors are saved in `%APPDATA%\RTTS\error.log`. If you report a bug, please
 
 **How do I update?**
 RTTS checks for a new version every time it starts and asks if you want to update. To update without being asked, turn on **Install updates automatically** in **Settings > General > About and updates**.
+
+**How do I make it speak another language?**
+In the main window, pick it under **Voice > Language**. Only the models and voices that speak that language are listed, and RTTS tells you which models can't. To show RTTS itself in another language, use **Settings > General > Language**.
+
+| Language | Voices |
+|---|---|
+| English | eSpeak, Piper, Kokoro, ⚡ Orpheus |
+| Spanish | eSpeak, Piper Medium and High, Kokoro |
+| French, Portuguese (Brazil), Hindi | eSpeak, Piper Medium, Kokoro |
+| German | eSpeak, Piper Low, Medium and High |
+| Russian, Chinese | eSpeak, Piper Medium |
+| Arabic | Piper Medium |
+
+Type in Roblox with that language's keyboard layout (for example Russian or Arabic) and RTTS reads it. Chinese typed with an input method like Pinyin can't be read, because RTTS only sees the Latin letters you press: paste your message into the chat with Ctrl+V instead.
 
 **Does it work on Mac or Linux?**
 No, it's Windows only for now.

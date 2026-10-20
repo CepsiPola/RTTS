@@ -12,6 +12,13 @@
 - **Custom** lets you pick any colour for the Start button, the sliders, headings and highlights, on a light or dark base.
 - If you used the Light or Dark theme before, you get Classic or Midnight.
 
+**New: 8 more languages**
+- The voice can now speak Spanish, French, Portuguese (Brazil), German, Hindi, Russian, Arabic and Chinese. Pick one under Voice > Language in the main window.
+- Only the models and voices that speak the chosen language are listed, and RTTS tells you which models can't speak it (for example, ⚡ Orpheus is English only).
+- New Piper voices: Davefx and Ald (Spanish), Daniela (Spanish, high quality), Siwis and Tom (French), Faber (Portuguese), Kerstin and Thorsten (German), Priyamvada and Pratham (Hindi), Irina and Ruslan (Russian), Kareem (Arabic) and Huayan (Chinese). Kokoro adds Spanish, French, Portuguese and Hindi voices from its existing voice pack.
+- RTTS itself (buttons, settings and messages) is translated into the same languages. It follows Windows' language, or pick one in Settings > General > Language.
+- Typing with a Russian, Arabic, Hindi or other non-Latin keyboard layout now works: RTTS used to read those keys as English letters. Chinese typed with an input method like Pinyin can't be read, so paste it with Ctrl+V.
+
 ## 1.0.1
 
 **New: optional anonymous voice stats**

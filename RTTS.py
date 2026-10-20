@@ -4080,7 +4080,7 @@ class App:
         f = ttk.Frame(win, padding=(14, 12))
         f.grid(row=0, column=0)
         set_titlebar_dark(win, self.theme["dark"])
-        v_text = tk.StringVar(value="Downloading RTTS %s ..." % rel["version"])
+        v_text = tk.StringVar(value=tr("Downloading RTTS %s ...") % rel["version"])
         ttk.Label(f, textvariable=v_text, width=46).grid(row=0, column=0, sticky="w")
         pb = ttk.Progressbar(f, length=320, maximum=100)
         pb.grid(row=1, column=0, sticky="ew", pady=(8, 8))
@@ -4097,7 +4097,7 @@ class App:
 
         def show(pct):
             pb["value"] = pct
-            v_text.set("Downloading RTTS %s: %d%%" % (rel["version"], pct))
+            v_text.set(tr("Downloading RTTS %s: %d%%") % (rel["version"], pct))
 
         def progress(done, total):
             if cancelled[0] or self.closing:

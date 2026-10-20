@@ -251,6 +251,8 @@ TRANSLATIONS = {
         "Whisper": "Susurro",
         "female": "mujer",
         "male": "hombre",
+        "Downloading RTTS %s ...": "Descargando RTTS %s ...",
+        "Downloading RTTS %s: %d%%": "Descargando RTTS %s: %d%%",
     },
     'fr': {
         "built in": "intégré",
@@ -452,6 +454,8 @@ TRANSLATIONS = {
         "Whisper": "Chuchotement",
         "female": "femme",
         "male": "homme",
+        "Downloading RTTS %s ...": "Téléchargement de RTTS %s ...",
+        "Downloading RTTS %s: %d%%": "Téléchargement de RTTS %s : %d%%",
     },
     'pt': {
         "built in": "integrado",
@@ -653,6 +657,8 @@ TRANSLATIONS = {
         "Whisper": "Sussurro",
         "female": "feminina",
         "male": "masculina",
+        "Downloading RTTS %s ...": "Baixando o RTTS %s ...",
+        "Downloading RTTS %s: %d%%": "Baixando o RTTS %s: %d%%",
     },
     'de': {
         "built in": "eingebaut",
@@ -854,6 +860,8 @@ TRANSLATIONS = {
         "Whisper": "Flüstern",
         "female": "weiblich",
         "male": "männlich",
+        "Downloading RTTS %s ...": "RTTS %s wird heruntergeladen ...",
+        "Downloading RTTS %s: %d%%": "RTTS %s wird heruntergeladen: %d%%",
     },
     'hi': {
         "built in": "बिल्ट-इन",
@@ -1055,6 +1063,8 @@ TRANSLATIONS = {
         "Whisper": "फुसफुसाहट",
         "female": "महिला",
         "male": "पुरुष",
+        "Downloading RTTS %s ...": "RTTS %s डाउनलोड हो रहा है ...",
+        "Downloading RTTS %s: %d%%": "RTTS %s डाउनलोड हो रहा है: %d%%",
     },
     'ru': {
         "built in": "встроенный",
@@ -1256,6 +1266,8 @@ TRANSLATIONS = {
         "Whisper": "Шёпот",
         "female": "женский",
         "male": "мужской",
+        "Downloading RTTS %s ...": "Загрузка RTTS %s ...",
+        "Downloading RTTS %s: %d%%": "Загрузка RTTS %s: %d%%",
     },
     'ar': {
         "built in": "مدمج",
@@ -1457,6 +1469,8 @@ TRANSLATIONS = {
         "Whisper": "همس",
         "female": "أنثى",
         "male": "ذكر",
+        "Downloading RTTS %s ...": "جارٍ تنزيل RTTS %s ...",
+        "Downloading RTTS %s: %d%%": "جارٍ تنزيل RTTS %s: %d%%",
     },
     'zh': {
         "built in": "内置",
@@ -1658,5 +1672,7 @@ TRANSLATIONS = {
         "Whisper": "耳语",
         "female": "女声",
         "male": "男声",
+        "Downloading RTTS %s ...": "正在下载 RTTS %s ...",
+        "Downloading RTTS %s: %d%%": "正在下载 RTTS %s：%d%%",
     },
 }
