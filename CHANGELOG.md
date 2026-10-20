@@ -12,6 +12,7 @@ The first public release.
 **App**
 - Start (F6) and Stop (F7) keys, which you can change in Settings > Keybinds. RTTS warns you if you pick a key Roblox already uses.
 - Options to only work while Roblox is the active window, also play the voice on your speakers, and let a new message stop the one that is playing.
+- Experimental option to skip emojis instead of reading them out.
 - Light, dark or match-Windows theme.
 
 **Installer**

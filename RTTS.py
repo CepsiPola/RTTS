@@ -278,6 +278,7 @@ DEFAULTS = {
     "speakers": True,
     "interrupt": False,        # a new chat message stops the one that is playing
     "slash_typed": False,
+    "skip_emojis": False,
     "theme": "light",          # light / dark / system
     "topmost": False,
     "start_key": "f6",         # Start / Stop hotkeys (pynput key names), set in Settings > Keybinds
@@ -885,6 +886,18 @@ def resample_linear(audio, sr_from, sr_to):
     x_old = np.linspace(0.0, 1.0, num=len(audio), endpoint=False)
     x_new = np.linspace(0.0, 1.0, num=n_out, endpoint=False)
     return np.interp(x_new, x_old, audio).astype(np.float32)
+
+
+def strip_emojis(text):
+    """Remove emojis (with their skin tones, joiners and variation selectors), keeping plain symbols like © and °."""
+    out = []
+    for ch in text:
+        cp = ord(ch)
+        if (cp >= 0x2000 and unicodedata.category(ch) in ("So", "Sk")) \
+                or cp in (0x200D, 0x20E3, 0xFE0E, 0xFE0F) or 0xE0020 <= cp <= 0xE007F:
+            continue
+        out.append(ch)
+    return re.sub(r"\s+", " ", "".join(out)).strip()
 
 
 def parse_chat_key(text):
@@ -1738,6 +1751,7 @@ class App:
         self.v_mon = tk.BooleanVar(value=True)
         self.v_interrupt = tk.BooleanVar(value=False)
         self.v_slash = tk.BooleanVar(value=False)
+        self.v_emoji = tk.BooleanVar(value=False)
         self.v_theme = tk.StringVar(value="light")
         self.v_top = tk.BooleanVar(value=False)
         self.v_test = tk.StringVar(value="Hello, this is a test.")
@@ -2013,6 +2027,10 @@ class App:
                   text="Warning: this might not work. Most versions of Roblox do not type the \"/\", "
                        "and if yours doesn't, none of your messages will be spoken. "
                        "If that happens, turn this off.").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        ttk.Checkbutton(g3, text="Skip emojis", variable=self.v_emoji,
+                        command=self.save_ui_prefs).grid(row=3, column=0, sticky="w", pady=(10, 0))
+        ttk.Label(g3, text="Emojis are left out instead of being read out. A message that is only emojis "
+                           "isn't spoken.", wraplength=380, justify="left").grid(row=4, column=0, sticky="w", pady=(2, 0))
 
         ttk.Label(outer, text="Changes here are saved automatically.").grid(row=1, column=0, sticky="w", pady=(0, 6))
         ttk.Button(outer, text="Close", command=self.close_settings).grid(row=2, column=0, sticky="e")
@@ -2233,6 +2251,7 @@ class App:
         data["theme"] = self.v_theme.get()
         data["topmost"] = bool(self.v_top.get())
         data["slash_typed"] = bool(self.v_slash.get())
+        data["skip_emojis"] = bool(self.v_emoji.get())
         data["start_key"] = self.hotkeys["start"].name
         data["stop_key"] = self.hotkeys["stop"].name
         try:
@@ -2485,6 +2504,7 @@ class App:
         self.v_mon.set(bool(d.get("speakers", True)))
         self.v_interrupt.set(bool(d.get("interrupt", False)))
         self.v_slash.set(bool(d.get("slash_typed", False)))
+        self.v_emoji.set(bool(d.get("skip_emojis", False)))
         theme = d.get("theme")
         self.v_theme.set(theme if theme in ("light", "dark", "system") else "light")
         self.v_top.set(bool(d.get("topmost", False)))
@@ -2525,6 +2545,7 @@ class App:
             "speakers": bool(self.v_mon.get()),
             "interrupt": bool(self.v_interrupt.get()),
             "slash_typed": bool(self.v_slash.get()),
+            "skip_emojis": bool(self.v_emoji.get()),
             "theme": self.v_theme.get(),
             "topmost": bool(self.v_top.get()),
             "start_key": self.hotkeys["start"].name,
@@ -2660,6 +2681,8 @@ class App:
         if purge is None:
             purge = bool(self.v_interrupt.get())
         text = (text or "").strip()
+        if self.v_emoji.get():
+            text = strip_emojis(text)
         if not text:
             return
         if self.engine is None and not self.loading:
